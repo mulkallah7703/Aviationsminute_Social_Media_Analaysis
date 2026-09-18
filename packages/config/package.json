@@ -1,0 +1,32 @@
+{
+  "name": "@sma/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "pino": "^9.9.0",
+    "pino-pretty": "^13.1.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@sma/eslint-config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "eslint": "^9.34.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@sma/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "generate": "node scripts/generate.cjs",
+    "pull": "node scripts/pull.cjs",
+    "verify": "node scripts/verify-connection.cjs",
+    "test": "node --test scripts/token-lifecycle.test.cjs",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.15.0",
+    "@sma/config": "workspace:*",
+    "@sma/providers": "workspace:*",
+    "@sma/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@sma/eslint-config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "eslint": "^9.34.0",
+    "prisma": "^6.15.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,19 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: sma-redis
+    command: ['redis-server', '/usr/local/etc/redis/redis.conf']
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sma-redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  sma-redis-data:

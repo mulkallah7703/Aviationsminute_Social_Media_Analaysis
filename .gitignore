@@ -1,0 +1,60 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Credentials
+**/credentials*.json
+**/*oauth*.json
+**/*client_secret*.json
+**/service-account*.json
+**/*.pem
+**/*.p12
+**/*.key
+secrets/
+credentials/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Prisma generated client (package local)
+packages/database/generated/
+packages/database/src/generated/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# Docker
+docker/data/
+
+# Temporary
+tmp/
+temp/
+*.tmp

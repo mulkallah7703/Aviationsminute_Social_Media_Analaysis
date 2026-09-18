@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+  schemas  = ["social"]
+}
+
+model Users {
+  userId         BigInt           @id(map: "PK_Users") @default(autoincrement()) @map("UserId")
+  email          String           @unique(map: "UQ_Users_Email") @map("Email") @db.NVarChar(320)
+  passwordHash   String?          @map("PasswordHash") @db.NVarChar(500)
+  firstName      String?          @map("FirstName") @db.NVarChar(100)
+  lastName       String?          @map("LastName") @db.NVarChar(100)
+  isActive       Boolean          @default(true, map: "DF_Users_IsActive") @map("IsActive")
+  emailVerified  Boolean          @default(false, map: "DF_Users_EmailVerified") @map("EmailVerified")
+  createdAt      DateTime         @default(dbgenerated("sysutcdatetime()"), map: "DF_Users_CreatedAt") @map("CreatedAt")
+  updatedAt      DateTime         @default(dbgenerated("sysutcdatetime()"), map: "DF_Users_UpdatedAt") @map("UpdatedAt")
+  lastLoginAt    DateTime?        @map("LastLoginAt")
+  socialAccounts SocialAccounts[]
+
+  @@map("Users")
+  @@schema("social")
+}
+
+model Platforms {
+  platformId     Int              @id(map: "PK_Platforms") @default(autoincrement()) @map("PlatformId")
+  platformCode   String           @unique(map: "UQ_Platforms_Code") @map("PlatformCode") @db.VarChar(50)
+  platformName   String           @map("PlatformName") @db.NVarChar(100)
+  isActive       Boolean          @default(true, map: "DF_Platforms_IsActive") @map("IsActive")
+  createdAt      DateTime         @default(dbgenerated("sysutcdatetime()"), map: "DF_Platforms_CreatedAt") @map("CreatedAt")
+  socialAccounts SocialAccounts[]
+
+  @@map("Platforms")
+  @@schema("social")
+}
+
+model SocialAccounts {
+  socialAccountId   BigInt            @id(map: "PK_SocialAccounts") @default(autoincrement()) @map("SocialAccountId")
+  userId            BigInt            @map("UserId")
+  platformId        Int               @map("PlatformId")
+  platformAccountId String            @map("PlatformAccountId") @db.NVarChar(255)
+  username          String?           @map("Username") @db.NVarChar(255)
+  displayName       String?           @map("DisplayName") @db.NVarChar(255)
+  accountType       String?           @map("AccountType") @db.NVarChar(100)
+  profileImageUrl   String?           @map("ProfileImageUrl") @db.NVarChar(2000)
+  profileUrl        String?           @map("ProfileUrl") @db.NVarChar(2000)
+  isConnected       Boolean           @default(true, map: "DF_SocialAccounts_IsConnected") @map("IsConnected")
+  connectionStatus  String?           @map("ConnectionStatus") @db.NVarChar(50)
+  connectedAt       DateTime          @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialAccounts_ConnectedAt") @map("ConnectedAt")
+  lastSyncedAt      DateTime?         @map("LastSyncedAt")
+  createdAt         DateTime          @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialAccounts_CreatedAt") @map("CreatedAt")
+  updatedAt         DateTime          @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialAccounts_UpdatedAt") @map("UpdatedAt")
+  accountMetrics    AccountMetrics?
+  metricSnapshots   MetricSnapshots[]
+  platforms         Platforms         @relation(fields: [platformId], references: [platformId], onUpdate: NoAction, map: "FK_SocialAccounts_Platforms")
+  users             Users             @relation(fields: [userId], references: [userId], onUpdate: NoAction, map: "FK_SocialAccounts_Users")
+  socialPosts       SocialPosts[]
+  socialProfiles    SocialProfiles?
+  socialTokens      SocialTokens?
+  syncJobs          SyncJobs[]
+
+  @@unique([platformId, platformAccountId], map: "UQ_SocialAccounts_PlatformAccount")
+  @@index([platformId], map: "IX_SocialAccounts_PlatformId")
+  @@index([userId], map: "IX_SocialAccounts_UserId")
+  @@map("SocialAccounts")
+  @@schema("social")
+}
+
+model SocialTokens {
+  socialTokenId         BigInt         @id(map: "PK_SocialTokens") @default(autoincrement()) @map("SocialTokenId")
+  socialAccountId       BigInt         @unique(map: "UQ_SocialTokens_Account") @map("SocialAccountId")
+  accessTokenEncrypted  String         @map("AccessTokenEncrypted") @db.NVarChar(Max)
+  refreshTokenEncrypted String?        @map("RefreshTokenEncrypted") @db.NVarChar(Max)
+  tokenType             String?        @map("TokenType") @db.NVarChar(50)
+  expiresAt             DateTime?      @map("ExpiresAt")
+  scope                 String?        @map("Scope") @db.NVarChar(Max)
+  createdAt             DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialTokens_CreatedAt") @map("CreatedAt")
+  updatedAt             DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialTokens_UpdatedAt") @map("UpdatedAt")
+  socialAccounts        SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_SocialTokens_SocialAccounts")
+
+  @@map("SocialTokens")
+  @@schema("social")
+}
+
+model SocialProfiles {
+  socialProfileId  BigInt         @id(map: "PK_SocialProfiles") @default(autoincrement()) @map("SocialProfileId")
+  socialAccountId  BigInt         @unique(map: "UQ_SocialProfiles_Account") @map("SocialAccountId")
+  bio              String?        @map("Bio") @db.NVarChar(Max)
+  countryCode      String?        @map("CountryCode") @db.VarChar(10)
+  languageCode     String?        @map("LanguageCode") @db.VarChar(20)
+  websiteUrl       String?        @map("WebsiteUrl") @db.NVarChar(2000)
+  followersCount   BigInt?        @map("FollowersCount")
+  followingCount   BigInt?        @map("FollowingCount")
+  subscribersCount BigInt?        @map("SubscribersCount")
+  totalViews       BigInt?        @map("TotalViews")
+  totalPosts       BigInt?        @map("TotalPosts")
+  verified         Boolean?       @map("Verified")
+  publishedAt      DateTime?      @map("PublishedAt")
+  createdAt        DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialProfiles_CreatedAt") @map("CreatedAt")
+  updatedAt        DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialProfiles_UpdatedAt") @map("UpdatedAt")
+  socialAccounts   SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_SocialProfiles_SocialAccounts")
+
+  @@map("SocialProfiles")
+  @@schema("social")
+}
+
+model SocialPosts {
+  socialPostId    BigInt         @id(map: "PK_SocialPosts") @default(autoincrement()) @map("SocialPostId")
+  socialAccountId BigInt         @map("SocialAccountId")
+  platformPostId  String         @map("PlatformPostId") @db.NVarChar(255)
+  postType        String?        @map("PostType") @db.NVarChar(100)
+  title           String?        @map("Title")
+  description     String?        @map("Description") @db.NVarChar(Max)
+  postUrl         String?        @map("PostUrl") @db.NVarChar(2000)
+  thumbnailUrl    String?        @map("ThumbnailUrl") @db.NVarChar(2000)
+  mediaUrl        String?        @map("MediaUrl") @db.NVarChar(2000)
+  publishedAt     DateTime?      @map("PublishedAt")
+  isDeleted       Boolean        @default(false, map: "DF_SocialPosts_IsDeleted") @map("IsDeleted")
+  createdAt       DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialPosts_CreatedAt") @map("CreatedAt")
+  updatedAt       DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SocialPosts_UpdatedAt") @map("UpdatedAt")
+  postMetrics     PostMetrics?
+  socialAccounts  SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_SocialPosts_SocialAccounts")
+
+  @@unique([socialAccountId, platformPostId], map: "UQ_SocialPosts_PlatformPost")
+  @@index([socialAccountId], map: "IX_SocialPosts_AccountId")
+  @@index([publishedAt(sort: Desc)], map: "IX_SocialPosts_PublishedAt")
+  @@map("SocialPosts")
+  @@schema("social")
+}
+
+model PostMetrics {
+  postMetricId      BigInt      @id(map: "PK_PostMetrics") @default(autoincrement()) @map("PostMetricId")
+  socialPostId      BigInt      @unique(map: "UQ_PostMetrics_Post") @map("SocialPostId")
+  viewsCount        BigInt?     @map("ViewsCount")
+  likesCount        BigInt?     @map("LikesCount")
+  commentsCount     BigInt?     @map("CommentsCount")
+  sharesCount       BigInt?     @map("SharesCount")
+  savesCount        BigInt?     @map("SavesCount")
+  reachCount        BigInt?     @map("ReachCount")
+  impressionsCount  BigInt?     @map("ImpressionsCount")
+  engagementCount   BigInt?     @map("EngagementCount")
+  watchTimeSeconds  BigInt?     @map("WatchTimeSeconds")
+  subscribersGained BigInt?     @map("SubscribersGained")
+  subscribersLost   BigInt?     @map("SubscribersLost")
+  recordedAt        DateTime    @default(dbgenerated("sysutcdatetime()"), map: "DF_PostMetrics_RecordedAt") @map("RecordedAt")
+  updatedAt         DateTime    @default(dbgenerated("sysutcdatetime()"), map: "DF_PostMetrics_UpdatedAt") @map("UpdatedAt")
+  socialPosts       SocialPosts @relation(fields: [socialPostId], references: [socialPostId], onUpdate: NoAction, map: "FK_PostMetrics_SocialPosts")
+
+  @@map("PostMetrics")
+  @@schema("social")
+}
+
+model AccountMetrics {
+  accountMetricId  BigInt         @id(map: "PK_AccountMetrics") @default(autoincrement()) @map("AccountMetricId")
+  socialAccountId  BigInt         @unique(map: "UQ_AccountMetrics_Account") @map("SocialAccountId")
+  followersCount   BigInt?        @map("FollowersCount")
+  followingCount   BigInt?        @map("FollowingCount")
+  subscribersCount BigInt?        @map("SubscribersCount")
+  viewsCount       BigInt?        @map("ViewsCount")
+  likesCount        BigInt?        @map("LikesCount")
+  likesDelta        BigInt?        @map("LikesDelta")
+  commentsCount     BigInt?        @map("CommentsCount")
+  sharesCount       BigInt?        @map("SharesCount")
+  savesCount        BigInt?        @map("SavesCount")
+  reachCount        BigInt?        @map("ReachCount")
+  impressionsCount  BigInt?        @map("ImpressionsCount")
+  engagementCount   BigInt?        @map("EngagementCount")
+  engagementDelta   BigInt?        @map("EngagementDelta")
+  watchTimeSeconds  BigInt?        @map("WatchTimeSeconds")
+  subscribersGained BigInt?        @map("SubscribersGained")
+  subscribersLost   BigInt?        @map("SubscribersLost")
+  recordedAt        DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_AccountMetrics_RecordedAt") @map("RecordedAt")
+  updatedAt        DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_AccountMetrics_UpdatedAt") @map("UpdatedAt")
+  socialAccounts   SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_AccountMetrics_SocialAccounts")
+
+  @@map("AccountMetrics")
+  @@schema("social")
+}
+
+model MetricSnapshots {
+  metricSnapshotId BigInt         @id(map: "PK_MetricSnapshots") @default(autoincrement()) @map("MetricSnapshotId")
+  socialAccountId  BigInt         @map("SocialAccountId")
+  snapshotDate     DateTime       @map("SnapshotDate") @db.Date
+  followersCount   BigInt?        @map("FollowersCount")
+  followingCount   BigInt?        @map("FollowingCount")
+  subscribersCount BigInt?        @map("SubscribersCount")
+  viewsCount       BigInt?        @map("ViewsCount")
+  likesCount        BigInt?        @map("LikesCount")
+  likesDelta        BigInt?        @map("LikesDelta")
+  commentsCount     BigInt?        @map("CommentsCount")
+  sharesCount       BigInt?        @map("SharesCount")
+  savesCount        BigInt?        @map("SavesCount")
+  reachCount        BigInt?        @map("ReachCount")
+  impressionsCount  BigInt?        @map("ImpressionsCount")
+  engagementCount   BigInt?        @map("EngagementCount")
+  engagementDelta   BigInt?        @map("EngagementDelta")
+  watchTimeSeconds  BigInt?        @map("WatchTimeSeconds")
+  subscribersGained BigInt?        @map("SubscribersGained")
+  subscribersLost   BigInt?        @map("SubscribersLost")
+  createdAt         DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_MetricSnapshots_CreatedAt") @map("CreatedAt")
+  socialAccounts   SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_MetricSnapshots_SocialAccounts")
+
+  @@unique([socialAccountId, snapshotDate], map: "UQ_MetricSnapshots_AccountDate")
+  @@index([socialAccountId, snapshotDate(sort: Desc)], map: "IX_MetricSnapshots_AccountDate")
+  @@map("MetricSnapshots")
+  @@schema("social")
+}
+
+model SyncJobs {
+  syncJobId       BigInt         @id(map: "PK_SyncJobs") @default(autoincrement()) @map("SyncJobId")
+  socialAccountId BigInt         @map("SocialAccountId")
+  jobType         String         @map("JobType") @db.NVarChar(100)
+  status          String         @map("Status") @db.NVarChar(50)
+  startedAt       DateTime?      @map("StartedAt")
+  completedAt     DateTime?      @map("CompletedAt")
+  recordsFetched  Int?           @map("RecordsFetched")
+  recordsInserted Int?           @map("RecordsInserted")
+  recordsUpdated  Int?           @map("RecordsUpdated")
+  errorMessage    String?        @map("ErrorMessage") @db.NVarChar(Max)
+  retryCount      Int            @default(0, map: "DF_SyncJobs_RetryCount") @map("RetryCount")
+  createdAt       DateTime       @default(dbgenerated("sysutcdatetime()"), map: "DF_SyncJobs_CreatedAt") @map("CreatedAt")
+  socialAccounts  SocialAccounts @relation(fields: [socialAccountId], references: [socialAccountId], onUpdate: NoAction, map: "FK_SyncJobs_SocialAccounts")
+
+  @@index([socialAccountId, status, createdAt(sort: Desc)], map: "IX_SyncJobs_AccountStatus")
+  @@map("SyncJobs")
+  @@schema("social")
+}
