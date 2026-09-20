@@ -20,7 +20,13 @@
     "db:generate": "pnpm --filter @sma/database generate",
     "db:pull": "pnpm --filter @sma/database pull",
     "db:verify": "pnpm --filter @sma/database verify",
+    "db:validate": "pnpm --filter @sma/database validate",
     "db:verify:readonly": "powershell -NoProfile -ExecutionPolicy Bypass -File packages/database/scripts/verify-readonly.ps1",
+    "test": "pnpm --filter @sma/database test",
+    "start:web": "pnpm --filter @sma/web start:prod",
+    "start:api": "pnpm --filter @sma/api start:prod",
+    "start:worker": "pnpm --filter @sma/worker start:prod",
+    "deploy:check": "node scripts/production-check.cjs",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "pnpm": {

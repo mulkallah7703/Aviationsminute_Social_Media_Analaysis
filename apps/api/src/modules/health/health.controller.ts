@@ -1,4 +1,5 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { HealthService } from './health.service';
 
 @Controller('health')
@@ -11,8 +12,11 @@ export class HealthController {
   }
 
   @Get('ready')
-  @HttpCode(HttpStatus.OK)
-  ready() {
-    return this.healthService.ready();
+  async ready(@Res({ passthrough: true }) response: Response) {
+    const body = await this.healthService.ready();
+    if (body.status !== 'ok') {
+      response.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return body;
   }
 }

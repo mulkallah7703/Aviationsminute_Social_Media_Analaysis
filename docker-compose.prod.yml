@@ -1,0 +1,42 @@
+# Production Redis — bind to localhost only. Never publish 6379 to the public Internet.
+#
+# Usage:
+#   export REDIS_PASSWORD='a-long-random-password'
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Application REDIS_URL example:
+#   redis://:YOUR_REDIS_PASSWORD@127.0.0.1:6379
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: sma-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --bind
+      - 0.0.0.0
+      - --protected-mode
+      - 'yes'
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - sma-redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  sma-redis-data:

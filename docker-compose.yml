@@ -1,10 +1,12 @@
+# Local development Redis
+# Prefer binding to the loopback interface so Redis is not reachable from other hosts.
 services:
   redis:
     image: redis:7.4-alpine
     container_name: sma-redis
     command: ['redis-server', '/usr/local/etc/redis/redis.conf']
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - ./docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - sma-redis-data:/data

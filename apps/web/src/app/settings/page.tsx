@@ -14,7 +14,7 @@ export default function SettingsPage() {
           <div>
             <dt className="text-sm text-ink-700/70">API URL</dt>
             <dd className="mt-1 font-medium text-ink-900">
-              {process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000'}
+              {process.env.NEXT_PUBLIC_API_URL?.trim() || '(same origin / Nginx)'}
             </dd>
           </div>
           <div>

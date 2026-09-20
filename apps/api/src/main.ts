@@ -21,7 +21,14 @@ async function bootstrap(): Promise<void> {
   });
 
   app.setGlobalPrefix('api');
-  app.use(helmet());
+  app.getHttpAdapter().getInstance().set('trust proxy', env.TRUST_PROXY);
+  app.enableShutdownHooks();
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   app.use(cookieParser(env.SESSION_SECRET));
   app.enableCors({
     origin: env.WEB_ORIGIN,
@@ -30,7 +37,15 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   await app.listen(env.API_PORT, env.API_HOST);
-  logger.info({ port: env.API_PORT, host: env.API_HOST }, 'API listening');
+  logger.info(
+    { port: env.API_PORT, host: env.API_HOST, nodeEnv: env.NODE_ENV },
+    'API listening',
+  );
 }
 
-void bootstrap();
+void bootstrap().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : 'API bootstrap failed';
+  // Avoid dumping stack secrets; message from env validation is safe field names only.
+  console.error(`[api] fatal: ${message}`);
+  process.exit(1);
+});

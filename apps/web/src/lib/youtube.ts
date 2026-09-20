@@ -1,6 +1,13 @@
+/**
+ * Browser navigation target for Google OAuth.
+ * Always uses the public API origin (never API_INTERNAL_URL).
+ */
 export function youtubeConnectUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
-  return `${baseUrl}/api/auth/google`;
+  const publicUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!publicUrl || publicUrl === '/') {
+    return '/api/auth/google';
+  }
+  return `${publicUrl.replace(/\/$/, '')}/api/auth/google`;
 }
 
 export function formatCount(value: string | null | undefined): string {

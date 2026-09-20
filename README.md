@@ -8,27 +8,23 @@ The first live integration will be **YouTube**. Other platforms are reserved in 
 
 Connect social accounts, synchronize real platform data, store it in Microsoft SQL Server, and present analytics through a professional dashboard.
 
-This repository currently contains **Step 1 only**: a scalable monorepo foundation. OAuth, YouTube API calls, and dashboard analytics are intentionally not implemented yet.
+This repository includes a working YouTube OAuth + analytics path, BullMQ sync workers, and VPS deployment assets. See [DEPLOYMENT.md](./DEPLOYMENT.md) for production setup.
 
 ## Architecture
 
 ```text
-Social Media Platforms
-        ↓
-Platform Connectors  (@sma/providers)
-        ↓
-OAuth                (API auth module — placeholder in Step 1)
-        ↓
-Sync Services / Workers  (apps/worker + BullMQ)
-        ↓
-SQL Server           (existing DigitalSocialMedia / social schema)
-        ↓
-Backend API          (apps/api)
-        ↓
-Frontend Dashboard   (apps/web)
+Internet → Nginx (HTTPS)
+              ├── /      → Next.js (apps/web)
+              └── /api/  → NestJS (apps/api)
+                              ↓
+                     SQL Server (DigitalSocialMedia)
+                              ↓
+                     Redis + Worker (BullMQ)
+                              ↓
+                     YouTube / future platforms (@sma/providers)
 ```
 
-The domain is platform-agnostic. YouTube is the first `SocialPlatformProvider` implementation, not a YouTube-only product.
+The domain is platform-agnostic. YouTube is the first live `SocialPlatformProvider`. TikTok Login Kit env placeholders are reserved; the connector is not production-live yet.
 
 Unsupported platforms render **Coming Soon** / **ستتاح قريبًا**. They do not invent numbers.
 
@@ -189,24 +185,23 @@ See `.env.example`. Required values include:
 
 Provider contract: `packages/providers`.
 
-- YouTube is registered first and remains unimplemented until the next approved step.
+- YouTube is implemented (OAuth, sync, analytics periods, token lifecycle).
 - Instagram, Facebook, TikTok, LinkedIn, X, and Snapchat are catalogued as coming soon.
+- TikTok Login Kit environment placeholders exist for production HTTPS callbacks; the connector itself is not live yet.
 - Adding a platform means implementing `SocialPlatformProvider`, registering it, and mapping sync jobs. Core modules should not become platform-specific.
 
 ## Current status
 
 Implemented:
 
-- Monorepo foundation
-- Prisma mapping of the existing `social` schema
-- NestJS Prisma module with a single client per process
-- Health check with database connectivity
-- Read-only platform verification
+- Monorepo foundation (pnpm + Turborepo)
+- Prisma mapping of the existing `social` schema (introspection + generate; no migrate reset)
+- NestJS API + BullMQ worker + Next.js web
+- Health checks (`/api/health`, `/api/health/ready`)
+- YouTube OAuth, encrypted tokens, refresh lifecycle, sync jobs, analytics
+- VPS deployment assets (PM2, Nginx template, Redis compose, `DEPLOYMENT.md`)
 
-Not implemented yet (wait for approval):
+Not live yet:
 
-- YouTube OAuth
-- YouTube Data API / Analytics API calls
-- Token exchange
-- Live dashboard analytics
+- TikTok connector (env reserved only)
 - Other social integrations
