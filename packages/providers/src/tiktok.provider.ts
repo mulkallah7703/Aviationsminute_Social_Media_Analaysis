@@ -402,6 +402,17 @@ export class TikTokProvider implements TikTokPlatformProvider {
     };
 
     if (!response.ok || !json.access_token) {
+      // Diagnostic only: never include tokens, secrets, codes, or request body.
+      console.warn(
+        '[tiktok.oauth.token]',
+        JSON.stringify({
+          httpStatus: response.status,
+          error: typeof json.error === 'string' ? json.error : undefined,
+          error_description:
+            typeof json.error_description === 'string' ? json.error_description : undefined,
+          message: typeof json.message === 'string' ? json.message : undefined,
+        }),
+      );
       throw mapTikTokOAuthError(json);
     }
 

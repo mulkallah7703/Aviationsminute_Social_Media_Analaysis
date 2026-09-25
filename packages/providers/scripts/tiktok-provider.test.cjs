@@ -149,9 +149,20 @@ describe('tiktok provider — Login Kit Web', () => {
   it('handles token exchange errors without exposing secrets', async () => {
     const provider = createProvider();
     const originalFetch = global.fetch;
+    const originalWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(' '));
+    };
     global.fetch = mock.fn(async () => ({
       ok: false,
-      json: async () => ({ error: 'invalid_grant', error_description: 'code expired' }),
+      status: 400,
+      json: async () => ({
+        error: 'invalid_grant',
+        error_description: 'code expired',
+        access_token: 'must-not-appear',
+        refresh_token: 'must-not-appear',
+      }),
     }));
     try {
       await assert.rejects(
@@ -166,8 +177,21 @@ describe('tiktok provider — Login Kit Web', () => {
           return true;
         },
       );
+      assert.equal(warnings.length, 1);
+      const diagnostic = warnings[0];
+      assert.match(diagnostic, /\[tiktok\.oauth\.token\]/);
+      assert.match(diagnostic, /"httpStatus":400/);
+      assert.match(diagnostic, /"error":"invalid_grant"/);
+      assert.match(diagnostic, /"error_description":"code expired"/);
+      assert.equal(diagnostic.includes('must-not-appear'), false);
+      assert.equal(diagnostic.includes('tt-client-secret'), false);
+      assert.equal(diagnostic.includes('bad-code'), false);
+      assert.equal(diagnostic.includes('access_token'), false);
+      assert.equal(diagnostic.includes('refresh_token'), false);
+      assert.equal(diagnostic.includes('client_secret'), false);
     } finally {
       global.fetch = originalFetch;
+      console.warn = originalWarn;
     }
   });
 
