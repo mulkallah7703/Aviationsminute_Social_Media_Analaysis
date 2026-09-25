@@ -1,12 +1,9 @@
-import { resolveApiBaseUrl } from '@/lib/api';
-
 /**
  * Browser navigation target for TikTok OAuth.
- * Uses the same API origin resolution as fetchApi / YouTube data calls
- * (NEXT_PUBLIC_API_URL in the browser; SSR falls back to API_INTERNAL_URL
- * or http://127.0.0.1:5000 so the Nest OAuth route is never hit on :3000).
+ * Always use a same-origin relative path so Nginx (production) or a local
+ * reverse-proxy can forward /api to Nest. Never use API_INTERNAL_URL here —
+ * that is for SSR fetches only and must not become the browser location.
  */
 export function tiktokConnectUrl(): string {
-  const baseUrl = resolveApiBaseUrl();
-  return `${baseUrl}/api/auth/tiktok`;
+  return '/api/auth/tiktok';
 }
