@@ -9,8 +9,6 @@ import {
 import {
   OAuthFlowError,
   ProviderCapabilityNotReadyError,
-  createTikTokCodeChallenge,
-  createTikTokCodeVerifier,
   type PlatformProviderRegistry,
   type TikTokPlatformProvider,
   type YouTubePlatformProvider,
@@ -149,11 +147,9 @@ export class AuthService {
       if (!env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET || !env.TIKTOK_REDIRECT_URI) {
         throw new OAuthFlowError('invalid_client', 'TikTok OAuth is not configured.');
       }
+      // Login Kit Web: CSRF state only. PKCE is Desktop/iOS/Android — not used for Web.
       const state = this.cookies.createOAuthState();
-      const codeVerifier = createTikTokCodeVerifier();
-      const codeChallenge = createTikTokCodeChallenge(codeVerifier);
       this.cookies.setOAuthState(response, state);
-      this.cookies.setOAuthCodeVerifier(response, codeVerifier);
       const tiktokPlatform = await this.platforms.findByCode('tiktok');
       const existing = tiktokPlatform
         ? await this.socialAccounts.findByUserAndPlatform(user.userId, tiktokPlatform.platformId)
@@ -162,8 +158,6 @@ export class AuthService {
       return await this.tiktokProvider().getAuthorizationUrl({
         state,
         redirectUri: env.TIKTOK_REDIRECT_URI,
-        codeChallenge,
-        codeChallengeMethod: 'S256',
       });
     } catch (error) {
       throw this.asOAuthFlowError(error, 'Failed to start TikTok authorization.');
@@ -193,23 +187,15 @@ export class AuthService {
         throw new OAuthFlowError('invalid_state', 'The OAuth state is invalid.');
       }
 
-      const codeVerifier = this.cookies.readOAuthCodeVerifier(request);
-      if (!codeVerifier) {
-        throw new OAuthFlowError(
-          'invalid_state',
-          'The OAuth PKCE verifier is missing. Try connecting again.',
-        );
-      }
-
       if (!env.TIKTOK_REDIRECT_URI) {
         throw new OAuthFlowError('invalid_client', 'TikTok OAuth is not configured.');
       }
 
       const user = await this.resolveWorkspaceUser(request, response);
+      // Web confidential-client exchange: client_secret only (no code_verifier).
       const tokens = await this.tiktokProvider().exchangeAuthorizationCode({
         code: query.code,
         redirectUri: env.TIKTOK_REDIRECT_URI,
-        codeVerifier,
       });
 
       const profile = await this.tiktokProvider().getAuthenticatedUser(tokens);

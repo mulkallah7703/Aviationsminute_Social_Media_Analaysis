@@ -5,22 +5,25 @@ Platform-agnostic TikTok Login Kit + Display API v2 integration for Aviationsmin
 ## OAuth flow
 
 1. User opens **Connect TikTok** → `GET /api/auth/tiktok`
-2. API creates a cryptographically random `state` and a PKCE `code_verifier`, stores both in signed HttpOnly cookies, derives `code_challenge = hex(SHA-256(code_verifier))` (TikTok Desktop encoding), and redirects to:
+2. API creates a cryptographically random `state`, stores it in a signed HttpOnly cookie, and redirects to:
 
    `https://www.tiktok.com/v2/auth/authorize/`
 
-   with `client_key`, `response_type=code`, scopes, `redirect_uri`, `state`, `code_challenge`, and `code_challenge_method=S256`.
+   with `client_key`, `response_type=code`, scopes, `redirect_uri`, and `state`.
+
+   Login Kit **Web** does **not** use PKCE (`code_challenge` / `code_verifier`). Those apply to Desktop / iOS / Android only.
 
 3. TikTok redirects to:
 
    `GET /api/auth/tiktok/callback?code=...&state=...`
 
-4. API validates `state`, reads the matching `code_verifier` from the cookie, exchanges the code server-side at
-   `https://open.tiktokapis.com/v2/oauth/token/` (including `code_verifier`), encrypts tokens, upserts
+4. API validates `state`, exchanges the code server-side at
+   `https://open.tiktokapis.com/v2/oauth/token/` with `client_key`, `client_secret`, `code`,
+   `grant_type=authorization_code`, and `redirect_uri`, encrypts tokens, upserts
    `SocialAccounts` / `SocialTokens` / profile fields, sets status `connected`,
    queues an initial sync, and redirects to `/tiktok?status=connected`.
 
-Tokens, `client_secret`, authorization codes, and `code_verifier` never appear in URLs, localStorage, browser JSON, or logs.
+Tokens, `client_secret`, and authorization codes never appear in URLs, localStorage, browser JSON, or logs.
 
 ## Required environment variables
 

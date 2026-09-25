@@ -11,7 +11,7 @@ export interface AuthorizationRequest {
   state: string;
   redirectUri: string;
   promptConsent?: boolean;
-  /** TikTok PKCE (S256). Challenge only — never put the verifier in the authorize URL. */
+  /** Optional. Desktop/mobile PKCE only — omit for Login Kit Web. */
   codeChallenge?: string;
   codeChallengeMethod?: 'S256';
 }
@@ -19,7 +19,7 @@ export interface AuthorizationRequest {
 export interface AuthorizationCodeExchange {
   code: string;
   redirectUri: string;
-  /** TikTok PKCE verifier paired with the authorize-time challenge. */
+  /** Optional. Desktop/mobile PKCE only — omit for Login Kit Web. */
   codeVerifier?: string;
 }
 

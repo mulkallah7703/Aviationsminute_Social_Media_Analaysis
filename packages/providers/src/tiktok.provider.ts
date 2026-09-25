@@ -27,8 +27,8 @@ const PKCE_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
 
 /**
- * TikTok Login Kit (desktop / PKCE-required clients) uses hex(SHA-256(verifier)),
- * not the standard OAuth base64url challenge encoding.
+ * TikTok Desktop / mobile PKCE helpers (hex SHA-256 challenge).
+ * Kept for a future Desktop Login Kit path. Login Kit Web must not use them.
  */
 export function createTikTokCodeVerifier(length = 64): string {
   const size = Math.min(128, Math.max(43, length));
@@ -165,6 +165,7 @@ export class TikTokProvider implements TikTokPlatformProvider {
     url.searchParams.set('scope', cfg.scopes.join(','));
     url.searchParams.set('redirect_uri', request.redirectUri);
     url.searchParams.set('state', request.state);
+    // Optional PKCE only when explicitly provided (Desktop). Web omits these.
     if (request.codeChallenge) {
       url.searchParams.set('code_challenge', request.codeChallenge);
       url.searchParams.set('code_challenge_method', request.codeChallengeMethod ?? 'S256');
@@ -181,6 +182,7 @@ export class TikTokProvider implements TikTokPlatformProvider {
       grant_type: 'authorization_code',
       redirect_uri: request.redirectUri,
     });
+    // Optional PKCE verifier only when explicitly provided (Desktop). Web omits it.
     if (request.codeVerifier) {
       body.set('code_verifier', request.codeVerifier);
     }

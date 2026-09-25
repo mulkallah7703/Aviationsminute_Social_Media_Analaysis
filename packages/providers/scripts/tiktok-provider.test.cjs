@@ -34,43 +34,29 @@ describe('tiktok oauth state helpers', () => {
   });
 });
 
-describe('tiktok pkce', () => {
+describe('tiktok pkce helpers (Desktop — unused by Web flow)', () => {
   it('generates code_verifier in the RFC 7636 / TikTok length and charset', () => {
     const verifier = createTikTokCodeVerifier();
     assert.ok(verifier.length >= 43 && verifier.length <= 128);
     assert.match(verifier, /^[A-Za-z0-9\-._~]+$/);
-    assert.notEqual(createTikTokCodeVerifier(), createTikTokCodeVerifier());
   });
 
-  it('generates code_challenge as hex SHA-256 of the verifier (TikTok Desktop)', () => {
+  it('generates code_challenge as hex SHA-256 of the verifier', () => {
     const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
     const challenge = createTikTokCodeChallenge(verifier);
     const expected = createHash('sha256').update(verifier, 'utf8').digest('hex');
     assert.equal(challenge, expected);
     assert.match(challenge, /^[0-9a-f]{64}$/);
-    assert.notEqual(challenge, Buffer.from(createHash('sha256').update(verifier).digest()).toString('base64url'));
-  });
-
-  it('callback retrieves matching code_verifier for token exchange', () => {
-    const stored = createTikTokCodeVerifier();
-    const jar = { sma_oauth_pkce: stored };
-    const retrieved = jar.sma_oauth_pkce;
-    assert.equal(retrieved, stored);
-    assert.notEqual(retrieved, createTikTokCodeChallenge(stored));
   });
 });
 
-describe('tiktok provider', () => {
-  it('builds authorize URL with scopes, state, and PKCE challenge', async () => {
+describe('tiktok provider — Login Kit Web', () => {
+  it('builds Web authorize URL without PKCE parameters', async () => {
     const provider = createProvider();
-    const verifier = createTikTokCodeVerifier();
-    const challenge = createTikTokCodeChallenge(verifier);
     const url = new URL(
       await provider.getAuthorizationUrl({
         state: 'csrf-state-1',
         redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
-        codeChallenge: challenge,
-        codeChallengeMethod: 'S256',
       }),
     );
     assert.equal(url.origin + url.pathname, 'https://www.tiktok.com/v2/auth/authorize/');
@@ -85,12 +71,12 @@ describe('tiktok provider', () => {
       url.searchParams.get('redirect_uri'),
       'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
     );
-    assert.equal(url.searchParams.get('code_challenge'), challenge);
-    assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
+    assert.equal(url.searchParams.get('code_challenge'), null);
+    assert.equal(url.searchParams.get('code_challenge_method'), null);
     assert.equal(url.searchParams.get('code_verifier'), null);
   });
 
-  it('token exchange sends code_verifier without logging secrets', async () => {
+  it('Web token exchange does not send code_verifier', async () => {
     const provider = createProvider();
     const originalFetch = global.fetch;
     let postedBody = '';
@@ -112,14 +98,15 @@ describe('tiktok provider', () => {
       await provider.exchangeAuthorizationCode({
         code: 'auth-code-value',
         redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
-        codeVerifier: 'pkce-verifier-value',
       });
       const params = new URLSearchParams(postedBody);
       assert.equal(params.get('grant_type'), 'authorization_code');
       assert.equal(params.get('code'), 'auth-code-value');
-      assert.equal(params.get('code_verifier'), 'pkce-verifier-value');
       assert.equal(params.get('client_key'), 'tt-client-key');
       assert.ok(params.get('client_secret'));
+      assert.equal(params.get('redirect_uri'), 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback');
+      assert.equal(params.get('code_verifier'), null);
+      assert.equal(postedBody.includes('code_verifier'), false);
     } finally {
       global.fetch = originalFetch;
     }
@@ -130,7 +117,6 @@ describe('tiktok provider', () => {
       openId: 'oid',
       displayName: 'Creator',
       followerCount: 10n,
-      followingCount: undefined,
       likesCount: undefined,
       videoCount: 3n,
     };
@@ -173,12 +159,10 @@ describe('tiktok provider', () => {
           provider.exchangeAuthorizationCode({
             code: 'bad-code',
             redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
-            codeVerifier: 'pkce-verifier',
           }),
         (error) => {
           assert.equal(error.code, 'reauthorization_required');
           assert.equal(String(error.message).includes('tt-client-secret'), false);
-          assert.equal(String(error.message).includes('pkce-verifier'), false);
           return true;
         },
       );
