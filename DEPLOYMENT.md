@@ -30,7 +30,7 @@ Nginx (80/443, TLS)
                      ↓
               Worker (BullMQ)
                      ↓
-              YouTube / future TikTok APIs
+              YouTube / TikTok APIs
 ```
 
 ---
@@ -133,13 +133,15 @@ nano .env   # fill EVERY placeholder — never commit this file
 | `SESSION_SECRET` | ≥32 chars |
 | `WORKSPACE_USER_EMAIL` | Workspace user bootstrap email |
 
-### Optional (TikTok — connector pending)
+### TikTok (Login Kit)
 
 | Variable | Purpose |
 |----------|---------|
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | Login Kit |
-| `TIKTOK_REDIRECT_URI` | `https://YOUR_DOMAIN/api/auth/tiktok/callback` |
+| `TIKTOK_REDIRECT_URI` | `https://aviationsminuteanalysis.com/api/auth/tiktok/callback` |
 | `TIKTOK_OAUTH_SCOPES` | `user.info.basic user.info.stats video.list` |
+
+See [TIKTOK.md](./TIKTOK.md).
 
 Generate secrets:
 
@@ -275,12 +277,11 @@ After publishing the consent screen (Testing → Production), reconnect YouTube 
 
 ### TikTok (Login Kit)
 
-When the TikTok connector is enabled:
-
-- Redirect URI: `https://YOUR_DOMAIN/api/auth/tiktok/callback`
-- Scopes only: `user.info.basic`, `user.info.stats`, `video.list`
+- Redirect URI: `https://aviationsminuteanalysis.com/api/auth/tiktok/callback`
+- Scopes: `user.info.basic`, `user.info.stats`, `video.list`
 - TikTok Web Login requires HTTPS
-- Do not submit the TikTok app for review until the product is ready
+- Ensure `social.Platforms` has a `tiktok` row (`pnpm db:ensure:tiktok`)
+- Full connector notes: [TIKTOK.md](./TIKTOK.md)
 
 ---
 

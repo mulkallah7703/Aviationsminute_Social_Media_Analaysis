@@ -1,17 +1,25 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { encryptSecret, parseApiEnv } from '@sma/config';
-import { PlatformRepository, SocialAccountRepository } from '@sma/database';
+import {
+  AccountMetricsRepository,
+  PlatformRepository,
+  SocialAccountRepository,
+} from '@sma/database';
 import {
   OAuthFlowError,
   ProviderCapabilityNotReadyError,
+  createTikTokCodeChallenge,
+  createTikTokCodeVerifier,
   type PlatformProviderRegistry,
+  type TikTokPlatformProvider,
   type YouTubePlatformProvider,
 } from '@sma/providers';
 import {
   resolveSocialConnectionStatus,
   type OAuthErrorCode,
   type OAuthTokenSet,
+  type TikTokUserSnapshot,
   type YoutubeChannelSnapshot,
 } from '@sma/types';
 import { PLATFORM_PROVIDER_REGISTRY } from '../../infrastructure/providers/providers.tokens';
@@ -30,6 +38,7 @@ export class AuthService {
     private readonly cookies: CookieSessionService,
     private readonly platforms: PlatformRepository,
     private readonly socialAccounts: SocialAccountRepository,
+    private readonly accountMetrics: AccountMetricsRepository,
     private readonly syncService: SyncService,
   ) {}
 
@@ -124,12 +133,117 @@ export class AuthService {
 
   frontendRedirectUrl(
     result: { status: 'connected' } | { status: 'error'; code: OAuthErrorCode },
+    path: '/youtube' | '/tiktok' = '/youtube',
   ): string {
     const env = parseApiEnv();
     if (result.status === 'connected') {
-      return `${env.WEB_ORIGIN}/youtube?status=connected`;
+      return `${env.WEB_ORIGIN}${path}?status=connected`;
     }
-    return `${env.WEB_ORIGIN}/youtube?status=error&code=${encodeURIComponent(result.code)}`;
+    return `${env.WEB_ORIGIN}${path}?status=error&code=${encodeURIComponent(result.code)}`;
+  }
+
+  async startTikTokAuthorization(request: Request, response: Response): Promise<string> {
+    try {
+      const user = await this.currentUser.resolve(request, response);
+      const env = parseApiEnv();
+      if (!env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET || !env.TIKTOK_REDIRECT_URI) {
+        throw new OAuthFlowError('invalid_client', 'TikTok OAuth is not configured.');
+      }
+      const state = this.cookies.createOAuthState();
+      const codeVerifier = createTikTokCodeVerifier();
+      const codeChallenge = createTikTokCodeChallenge(codeVerifier);
+      this.cookies.setOAuthState(response, state);
+      this.cookies.setOAuthCodeVerifier(response, codeVerifier);
+      const tiktokPlatform = await this.platforms.findByCode('tiktok');
+      const existing = tiktokPlatform
+        ? await this.socialAccounts.findByUserAndPlatform(user.userId, tiktokPlatform.platformId)
+        : null;
+      void existing;
+      return await this.tiktokProvider().getAuthorizationUrl({
+        state,
+        redirectUri: env.TIKTOK_REDIRECT_URI,
+        codeChallenge,
+        codeChallengeMethod: 'S256',
+      });
+    } catch (error) {
+      throw this.asOAuthFlowError(error, 'Failed to start TikTok authorization.');
+    }
+  }
+
+  async completeTikTokCallback(
+    request: Request,
+    response: Response,
+    query: { code?: string; state?: string; error?: string; error_description?: string },
+  ): Promise<{ status: 'connected' } | { status: 'error'; code: OAuthErrorCode }> {
+    const env = parseApiEnv();
+
+    try {
+      if (query.error) {
+        throw this.fromTikTokError(query.error);
+      }
+      if (!query.code) {
+        throw new OAuthFlowError('missing_code', 'The authorization code is missing.');
+      }
+      if (!query.state) {
+        throw new OAuthFlowError('missing_state', 'The OAuth state is missing.');
+      }
+
+      const expectedState = this.cookies.readOAuthState(request);
+      if (!expectedState || expectedState !== query.state) {
+        throw new OAuthFlowError('invalid_state', 'The OAuth state is invalid.');
+      }
+
+      const codeVerifier = this.cookies.readOAuthCodeVerifier(request);
+      if (!codeVerifier) {
+        throw new OAuthFlowError(
+          'invalid_state',
+          'The OAuth PKCE verifier is missing. Try connecting again.',
+        );
+      }
+
+      if (!env.TIKTOK_REDIRECT_URI) {
+        throw new OAuthFlowError('invalid_client', 'TikTok OAuth is not configured.');
+      }
+
+      const user = await this.resolveWorkspaceUser(request, response);
+      const tokens = await this.tiktokProvider().exchangeAuthorizationCode({
+        code: query.code,
+        redirectUri: env.TIKTOK_REDIRECT_URI,
+        codeVerifier,
+      });
+
+      const profile = await this.tiktokProvider().getAuthenticatedUser(tokens);
+      if (!profile) {
+        throw new OAuthFlowError(
+          'no_tiktok_user',
+          'TikTok did not return a user profile for this authorization.',
+        );
+      }
+
+      const platform = await this.findTikTokPlatform();
+      const account = await this.persistTikTokConnection(
+        env.SOCIAL_TOKEN_ENCRYPTION_KEY,
+        user.userId,
+        platform.platformId,
+        profile,
+        tokens,
+      );
+
+      try {
+        await this.syncService.enqueueTikTokSync(account.socialAccountId, 'scheduled');
+      } catch {
+        this.logger.warn('TikTok connected, but the initial sync job could not be queued.');
+      }
+
+      this.logger.log('TikTok account connected.');
+      return { status: 'connected' };
+    } catch (error) {
+      const code = this.toErrorCode(error);
+      this.logger.warn(`TikTok OAuth callback failed: ${code}`);
+      return { status: 'error', code };
+    } finally {
+      this.cookies.clearOAuthState(response);
+    }
   }
 
   toPublicErrorCode(error: unknown): OAuthErrorCode {
@@ -138,6 +252,10 @@ export class AuthService {
 
   private youtubeProvider(): YouTubePlatformProvider {
     return this.providers.get('youtube') as YouTubePlatformProvider;
+  }
+
+  private tiktokProvider(): TikTokPlatformProvider {
+    return this.providers.get('tiktok') as TikTokPlatformProvider;
   }
 
   private async resolveWorkspaceUser(request: Request, response: Response) {
@@ -157,6 +275,18 @@ export class AuthService {
       return platform;
     } catch (error) {
       throw this.asOAuthFlowError(error, 'Failed to load the YouTube platform record.');
+    }
+  }
+
+  private async findTikTokPlatform() {
+    try {
+      const platform = await this.platforms.findByCode('tiktok');
+      if (!platform) {
+        throw new OAuthFlowError('database_failure', 'The TikTok platform record was not found.');
+      }
+      return platform;
+    } catch (error) {
+      throw this.asOAuthFlowError(error, 'Failed to load the TikTok platform record.');
     }
   }
 
@@ -197,12 +327,71 @@ export class AuthService {
     }
   }
 
+  private async persistTikTokConnection(
+    encryptionKey: string,
+    userId: bigint,
+    platformId: number,
+    profile: TikTokUserSnapshot,
+    tokens: OAuthTokenSet,
+  ) {
+    try {
+      const openId = profile.openId || tokens.openId;
+      if (!openId) {
+        throw new OAuthFlowError('no_tiktok_user', 'TikTok open_id is missing.');
+      }
+      return await this.socialAccounts.upsertConnectedAccount({
+        userId,
+        platformId,
+        platformAccountId: openId,
+        username: null,
+        displayName: profile.displayName ?? null,
+        accountType: 'creator',
+        profileImageUrl: profile.avatarUrl ?? null,
+        profileUrl: profile.profileUrl ?? null,
+        accessTokenEncrypted: encryptSecret(tokens.accessToken, encryptionKey),
+        refreshTokenEncrypted: tokens.refreshToken
+          ? encryptSecret(tokens.refreshToken, encryptionKey)
+          : undefined,
+        tokenType: tokens.tokenType ?? null,
+        expiresAt: tokens.expiresAt ?? null,
+        scope: tokens.scopes.join(','),
+        bio: profile.bioDescription ?? null,
+        countryCode: null,
+        languageCode: null,
+        subscribersCount: profile.followerCount ?? null,
+        totalViews: null,
+        totalPosts: profile.videoCount ?? null,
+        publishedAt: null,
+      }).then(async (account) => {
+        await this.accountMetrics.upsertForAccount(account.socialAccountId, {
+          followersCount: profile.followerCount ?? null,
+          followingCount: profile.followingCount ?? null,
+          subscribersCount: profile.followerCount ?? null,
+          viewsCount: null,
+          likesCount: profile.likesCount ?? null,
+          likesDelta: null,
+          commentsCount: null,
+          sharesCount: null,
+          savesCount: null,
+          reachCount: null,
+          impressionsCount: null,
+          watchTimeSeconds: null,
+          subscribersGained: null,
+          subscribersLost: null,
+        });
+        return account;
+      });
+    } catch (error) {
+      throw this.asOAuthFlowError(error, 'Failed to persist the TikTok connection.');
+    }
+  }
+
   private asOAuthFlowError(error: unknown, fallbackMessage: string): OAuthFlowError {
     if (error instanceof OAuthFlowError) {
       return error;
     }
     if (error instanceof ProviderCapabilityNotReadyError) {
-      return new OAuthFlowError('invalid_client', 'Google OAuth is not configured.');
+      return new OAuthFlowError('invalid_client', 'OAuth is not configured.');
     }
     this.logger.warn(fallbackMessage);
     return new OAuthFlowError('database_failure', fallbackMessage);
@@ -216,6 +405,16 @@ export class AuthService {
       return new OAuthFlowError('redirect_uri_mismatch', 'Redirect URI mismatch.');
     }
     return new OAuthFlowError('oauth_error', 'Google authorization failed.');
+  }
+
+  private fromTikTokError(error: string): OAuthFlowError {
+    if (error === 'access_denied') {
+      return new OAuthFlowError('access_denied', 'TikTok authorization was denied.');
+    }
+    if (error === 'redirect_uri_mismatch') {
+      return new OAuthFlowError('redirect_uri_mismatch', 'TikTok redirect URI mismatch.');
+    }
+    return new OAuthFlowError('oauth_error', 'TikTok authorization failed.');
   }
 
   private toErrorCode(error: unknown): OAuthErrorCode {

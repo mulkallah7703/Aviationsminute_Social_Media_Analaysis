@@ -24,7 +24,7 @@ Internet → Nginx (HTTPS)
                      YouTube / future platforms (@sma/providers)
 ```
 
-The domain is platform-agnostic. YouTube is the first live `SocialPlatformProvider`. TikTok Login Kit env placeholders are reserved; the connector is not production-live yet.
+The domain is platform-agnostic. YouTube and TikTok are live `SocialPlatformProvider` implementations. Other platforms remain catalogued as coming soon.
 
 Unsupported platforms render **Coming Soon** / **ستتاح قريبًا**. They do not invent numbers.
 
@@ -186,8 +186,8 @@ See `.env.example`. Required values include:
 Provider contract: `packages/providers`.
 
 - YouTube is implemented (OAuth, sync, analytics periods, token lifecycle).
-- Instagram, Facebook, TikTok, LinkedIn, X, and Snapchat are catalogued as coming soon.
-- TikTok Login Kit environment placeholders exist for production HTTPS callbacks; the connector itself is not live yet.
+- TikTok is implemented (Login Kit OAuth v2, sync, analytics periods, token lifecycle). See [TIKTOK.md](./TIKTOK.md).
+- Instagram, Facebook, LinkedIn, X, and Snapchat are catalogued as coming soon.
 - Adding a platform means implementing `SocialPlatformProvider`, registering it, and mapping sync jobs. Core modules should not become platform-specific.
 
 ## Current status
@@ -199,9 +199,9 @@ Implemented:
 - NestJS API + BullMQ worker + Next.js web
 - Health checks (`/api/health`, `/api/health/ready`)
 - YouTube OAuth, encrypted tokens, refresh lifecycle, sync jobs, analytics
+- TikTok OAuth (Login Kit), encrypted tokens, refresh lifecycle, sync jobs, analytics ([TIKTOK.md](./TIKTOK.md))
 - VPS deployment assets (PM2, Nginx template, Redis compose, `DEPLOYMENT.md`)
 
 Not live yet:
 
-- TikTok connector (env reserved only)
 - Other social integrations

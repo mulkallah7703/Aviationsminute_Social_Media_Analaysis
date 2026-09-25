@@ -11,11 +11,16 @@ export interface AuthorizationRequest {
   state: string;
   redirectUri: string;
   promptConsent?: boolean;
+  /** TikTok PKCE (S256). Challenge only — never put the verifier in the authorize URL. */
+  codeChallenge?: string;
+  codeChallengeMethod?: 'S256';
 }
 
 export interface AuthorizationCodeExchange {
   code: string;
   redirectUri: string;
+  /** TikTok PKCE verifier paired with the authorize-time challenge. */
+  codeVerifier?: string;
 }
 
 export interface ProviderSyncCursor {

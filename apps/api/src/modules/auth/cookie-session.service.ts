@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { parseApiEnv, type ApiEnv } from '@sma/config';
 
 const STATE_COOKIE = 'sma_oauth_state';
+const PKCE_VERIFIER_COOKIE = 'sma_oauth_pkce';
 const USER_COOKIE = 'sma_uid';
 
 @Injectable()
@@ -33,6 +34,24 @@ export class CookieSessionService {
 
   clearOAuthState(response: Response): void {
     response.clearCookie(STATE_COOKIE, this.baseCookieOptions());
+    this.clearOAuthCodeVerifier(response);
+  }
+
+  setOAuthCodeVerifier(response: Response, codeVerifier: string): void {
+    response.cookie(PKCE_VERIFIER_COOKIE, codeVerifier, {
+      ...this.baseCookieOptions(),
+      maxAge: 10 * 60 * 1000,
+      signed: true,
+    });
+  }
+
+  readOAuthCodeVerifier(request: Request): string | undefined {
+    const value = request.signedCookies?.[PKCE_VERIFIER_COOKIE];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  }
+
+  clearOAuthCodeVerifier(response: Response): void {
+    response.clearCookie(PKCE_VERIFIER_COOKIE, this.baseCookieOptions());
   }
 
   setUserId(response: Response, userId: bigint): void {

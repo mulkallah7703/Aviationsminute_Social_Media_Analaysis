@@ -1,20 +1,24 @@
 import { PLATFORM_CATALOG } from '@sma/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge';
+import { TikTokConnectionPanel } from '@/components/tiktok/tiktok-connection-panel';
 import { YoutubeConnectionPanel } from '@/components/youtube/youtube-connection-panel';
 import { fetchApi } from '@/lib/api';
-import type { YoutubeConnectionResponse } from '@sma/types';
+import type { TikTokConnectionResponse, YoutubeConnectionResponse } from '@sma/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PlatformsPage() {
-  const youtube = await fetchApi<YoutubeConnectionResponse>('/api/youtube/connection');
+  const [youtube, tiktok] = await Promise.all([
+    fetchApi<YoutubeConnectionResponse>('/api/youtube/connection'),
+    fetchApi<TikTokConnectionResponse>('/api/tiktok/connection'),
+  ]);
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Connected Platforms"
-        description="YouTube can be connected now. Other platform connectors remain reserved and show no placeholder metrics."
+        description="YouTube and TikTok can be connected now. Other platform connectors remain reserved and show no placeholder metrics."
       />
 
       <YoutubeConnectionPanel
@@ -22,8 +26,15 @@ export default async function PlatformsPage() {
         status={youtube.ok ? youtube.data.status : 'disconnected'}
       />
 
+      <TikTokConnectionPanel
+        account={tiktok.ok ? tiktok.data.account : null}
+        status={tiktok.ok ? tiktok.data.status : 'disconnected'}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {PLATFORM_CATALOG.filter((platform) => platform.code !== 'youtube').map((platform) => (
+        {PLATFORM_CATALOG.filter(
+          (platform) => platform.code !== 'youtube' && platform.code !== 'tiktok',
+        ).map((platform) => (
           <article
             key={platform.code}
             className="rounded-2xl border border-cloud-200 bg-white p-5 shadow-panel"

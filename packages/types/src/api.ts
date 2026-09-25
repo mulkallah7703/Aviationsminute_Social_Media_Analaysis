@@ -92,8 +92,10 @@ export const OAUTH_ERROR_CODES = [
   'invalid_state',
   'token_exchange_failed',
   'no_youtube_channel',
+  'no_tiktok_user',
   'quota_exceeded',
   'youtube_api_error',
+  'tiktok_api_error',
   'database_failure',
   'oauth_error',
   'reauthorization_required',
@@ -103,24 +105,24 @@ export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
 
 export const OAUTH_ERROR_MESSAGES: Record<OAuthErrorCode, { en: string; ar: string }> = {
   access_denied: {
-    en: 'YouTube authorization was denied.',
-    ar: 'تم رفض تفويض يوتيوب.',
+    en: 'Authorization was denied.',
+    ar: 'تم رفض التفويض.',
   },
   invalid_grant: {
     en: 'The authorization code is invalid or has expired. Try connecting again.',
     ar: 'رمز التفويض غير صالح أو منتهٍ. حاول الربط مرة أخرى.',
   },
   invalid_client: {
-    en: 'Google rejected the OAuth client configuration.',
-    ar: 'رفض Google إعداد تطبيق OAuth.',
+    en: 'The OAuth client configuration was rejected.',
+    ar: 'تم رفض إعداد تطبيق OAuth.',
   },
   redirect_uri_mismatch: {
-    en: 'The redirect URI does not match the Google Cloud client configuration.',
-    ar: 'رابط إعادة التوجيه لا يطابق إعداد Google Cloud.',
+    en: 'The redirect URI does not match the OAuth client configuration.',
+    ar: 'رابط إعادة التوجيه لا يطابق إعداد OAuth.',
   },
   missing_code: {
-    en: 'Google did not return an authorization code.',
-    ar: 'لم يُرجع Google رمز التفويض.',
+    en: 'The authorization code is missing.',
+    ar: 'رمز التفويض مفقود.',
   },
   missing_state: {
     en: 'The OAuth state is missing. Try connecting again.',
@@ -131,32 +133,40 @@ export const OAUTH_ERROR_MESSAGES: Record<OAuthErrorCode, { en: string; ar: stri
     ar: 'قيمة الحماية غير صالحة. حاول الربط مرة أخرى.',
   },
   token_exchange_failed: {
-    en: 'Google token exchange failed. Try connecting again.',
+    en: 'Token exchange failed. Try connecting again.',
     ar: 'فشل استبدال رمز التفويض. حاول الربط مرة أخرى.',
   },
   no_youtube_channel: {
     en: 'This Google account does not have a YouTube channel.',
     ar: 'حساب Google هذا لا يحتوي على قناة يوتيوب.',
   },
+  no_tiktok_user: {
+    en: 'TikTok did not return a user profile for this authorization.',
+    ar: 'لم يُرجع تيك توك ملف مستخدم لهذا التفويض.',
+  },
   quota_exceeded: {
-    en: 'The YouTube API quota was exceeded. Try again later.',
-    ar: 'تم تجاوز حد استخدام واجهة يوتيوب. حاول لاحقاً.',
+    en: 'The platform API quota was exceeded. Try again later.',
+    ar: 'تم تجاوز حد استخدام واجهة المنصة. حاول لاحقاً.',
   },
   youtube_api_error: {
-    en: 'YouTube could not return the authenticated channel.',
-    ar: 'تعذر على يوتيوب إرجاع القناة المصادق عليها.',
+    en: 'YouTube could not complete the request.',
+    ar: 'تعذر على يوتيوب إكمال الطلب.',
+  },
+  tiktok_api_error: {
+    en: 'TikTok could not complete the request.',
+    ar: 'تعذر على تيك توك إكمال الطلب.',
   },
   database_failure: {
-    en: 'The YouTube connection could not be saved.',
-    ar: 'تعذر حفظ ربط يوتيوب.',
+    en: 'The connection could not be saved.',
+    ar: 'تعذر حفظ الربط.',
   },
   oauth_error: {
-    en: 'YouTube authorization failed. Try connecting again.',
-    ar: 'فشل تفويض يوتيوب. حاول الربط مرة أخرى.',
+    en: 'Authorization failed. Try connecting again.',
+    ar: 'فشل التفويض. حاول الربط مرة أخرى.',
   },
   reauthorization_required: {
-    en: 'YouTube access was revoked. Connect YouTube again to continue.',
-    ar: 'تم إلغاء صلاحية يوتيوب. أعد الربط للمتابعة.',
+    en: 'Access was revoked. Connect again to continue.',
+    ar: 'تم إلغاء الصلاحية. أعد الربط للمتابعة.',
   },
 };
 
@@ -165,6 +175,7 @@ export function isOAuthErrorCode(value: string): value is OAuthErrorCode {
 }
 
 export const YOUTUBE_SYNC_ERROR_CODE = 'YOUTUBE_ANALYTICS_SYNC_FAILED' as const;
+export const TIKTOK_SYNC_ERROR_CODE = 'TIKTOK_ANALYTICS_SYNC_FAILED' as const;
 
 export interface YoutubeAnalyticsMetricValue {
   value: string | null;
@@ -224,6 +235,32 @@ export interface YoutubeSyncStatusResponse {
   messageAr: string;
   lastSyncedAt: string | null;
 }
+
+export interface TikTokConnectionAccount {
+  id: string;
+  platformAccountId: string;
+  displayName: string | null;
+  username: string | null;
+  profileImageUrl: string | null;
+  profileUrl: string | null;
+  bio: string | null;
+  countryCode: string | null;
+  publishedAt: string | null;
+  subscribersCount: string | null;
+  followingCount: string | null;
+  likesCount: string | null;
+  totalViews: string | null;
+  totalPosts: string | null;
+}
+
+export interface TikTokConnectionResponse {
+  connected: boolean;
+  status: SocialConnectionStatus;
+  account: TikTokConnectionAccount | null;
+}
+
+export type TikTokAnalyticsResponse = YoutubeAnalyticsResponse;
+export type TikTokSyncStatusResponse = YoutubeSyncStatusResponse;
 
 export type AnalyticsOverviewResponse = AnalyticsUnavailableResponse | YoutubeAnalyticsResponse;
 

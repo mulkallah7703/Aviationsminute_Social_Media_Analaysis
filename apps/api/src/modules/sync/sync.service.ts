@@ -17,6 +17,30 @@ export class SyncService {
     reason: 'scheduled' | 'manual',
     jobType: SyncJobType = 'full',
   ) {
+    return this.enqueuePlatformSync('youtube', socialAccountId, reason, jobType, {
+      message: 'YouTube sync job queued.',
+      messageAr: 'تمت جدولة مزامنة يوتيوب.',
+    });
+  }
+
+  async enqueueTikTokSync(
+    socialAccountId: bigint,
+    reason: 'scheduled' | 'manual',
+    jobType: SyncJobType = 'full',
+  ) {
+    return this.enqueuePlatformSync('tiktok', socialAccountId, reason, jobType, {
+      message: 'TikTok sync job queued.',
+      messageAr: 'تمت جدولة مزامنة تيك توك.',
+    });
+  }
+
+  private async enqueuePlatformSync(
+    platformCode: 'youtube' | 'tiktok',
+    socialAccountId: bigint,
+    reason: 'scheduled' | 'manual',
+    jobType: SyncJobType,
+    messages: { message: string; messageAr: string },
+  ) {
     const jobRow = await this.syncJobs.create({
       socialAccountId,
       jobType,
@@ -27,7 +51,7 @@ export class SyncService {
       JOB_NAMES.SYNC_ACCOUNT,
       {
         socialAccountId: socialAccountId.toString(),
-        platformCode: 'youtube',
+        platformCode,
         jobType,
         reason,
         syncJobId: jobRow.syncJobId.toString(),
@@ -45,8 +69,8 @@ export class SyncService {
       syncJobId: jobRow.syncJobId.toString(),
       jobId: job.id ?? null,
       job,
-      message: 'YouTube sync job queued.',
-      messageAr: 'تمت جدولة مزامنة يوتيوب.',
+      message: messages.message,
+      messageAr: messages.messageAr,
     };
   }
 

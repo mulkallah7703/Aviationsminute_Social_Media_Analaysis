@@ -15,6 +15,8 @@ export { SocialPostRepository } from './repositories/social-post.repository';
 export { SyncJobRepository } from './repositories/sync-job.repository';
 export { YoutubeAccountSync } from './youtube-account-sync';
 export type { YoutubeAccountSyncResult } from './youtube-account-sync';
+export { TikTokAccountSync } from './tiktok-account-sync';
+export type { TikTokAccountSyncResult } from './tiktok-account-sync';
 export {
   ACCESS_TOKEN_REFRESH_BUFFER_MS,
   InProcessRefreshCoordinator,

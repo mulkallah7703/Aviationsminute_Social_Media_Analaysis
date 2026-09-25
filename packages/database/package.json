@@ -19,6 +19,7 @@
     "pull": "node scripts/pull.cjs",
     "verify": "node scripts/verify-connection.cjs",
     "validate": "node scripts/validate.cjs",
+    "ensure:tiktok-platform": "node scripts/ensure-tiktok-platform.cjs",
     "test": "node --test scripts/token-lifecycle.test.cjs",
     "clean": "rimraf dist"
   },

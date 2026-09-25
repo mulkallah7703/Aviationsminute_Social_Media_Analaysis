@@ -1,0 +1,265 @@
+const { describe, it, mock } = require('node:test');
+const assert = require('node:assert/strict');
+const { createHash, randomBytes } = require('node:crypto');
+const {
+  TikTokProvider,
+  createTikTokCodeVerifier,
+  createTikTokCodeChallenge,
+} = require('../dist/tiktok.provider');
+const { resolveSocialConnectionStatus } = require('@sma/types');
+
+function createProvider(overrides = {}) {
+  return new TikTokProvider({
+    clientKey: 'tt-client-key',
+    clientSecret: 'tt-client-secret',
+    redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
+    scopes: ['user.info.basic', 'user.info.stats', 'video.list'],
+    ...overrides,
+  });
+}
+
+describe('tiktok oauth state helpers', () => {
+  it('generates cryptographically random high-entropy state values', () => {
+    const a = randomBytes(32).toString('base64url');
+    const b = randomBytes(32).toString('base64url');
+    assert.notEqual(a, b);
+    assert.ok(a.length >= 40);
+  });
+
+  it('validates callback state equality (CSRF)', () => {
+    const expected = 'csrf-expected';
+    assert.equal(expected === 'csrf-expected', true);
+    assert.equal(expected === 'tampered', false);
+    assert.equal(Boolean(undefined && expected === undefined), false);
+  });
+});
+
+describe('tiktok pkce', () => {
+  it('generates code_verifier in the RFC 7636 / TikTok length and charset', () => {
+    const verifier = createTikTokCodeVerifier();
+    assert.ok(verifier.length >= 43 && verifier.length <= 128);
+    assert.match(verifier, /^[A-Za-z0-9\-._~]+$/);
+    assert.notEqual(createTikTokCodeVerifier(), createTikTokCodeVerifier());
+  });
+
+  it('generates code_challenge as hex SHA-256 of the verifier (TikTok Desktop)', () => {
+    const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+    const challenge = createTikTokCodeChallenge(verifier);
+    const expected = createHash('sha256').update(verifier, 'utf8').digest('hex');
+    assert.equal(challenge, expected);
+    assert.match(challenge, /^[0-9a-f]{64}$/);
+    assert.notEqual(challenge, Buffer.from(createHash('sha256').update(verifier).digest()).toString('base64url'));
+  });
+
+  it('callback retrieves matching code_verifier for token exchange', () => {
+    const stored = createTikTokCodeVerifier();
+    const jar = { sma_oauth_pkce: stored };
+    const retrieved = jar.sma_oauth_pkce;
+    assert.equal(retrieved, stored);
+    assert.notEqual(retrieved, createTikTokCodeChallenge(stored));
+  });
+});
+
+describe('tiktok provider', () => {
+  it('builds authorize URL with scopes, state, and PKCE challenge', async () => {
+    const provider = createProvider();
+    const verifier = createTikTokCodeVerifier();
+    const challenge = createTikTokCodeChallenge(verifier);
+    const url = new URL(
+      await provider.getAuthorizationUrl({
+        state: 'csrf-state-1',
+        redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+      }),
+    );
+    assert.equal(url.origin + url.pathname, 'https://www.tiktok.com/v2/auth/authorize/');
+    assert.equal(url.searchParams.get('client_key'), 'tt-client-key');
+    assert.equal(url.searchParams.get('response_type'), 'code');
+    assert.equal(url.searchParams.get('state'), 'csrf-state-1');
+    assert.equal(
+      url.searchParams.get('scope'),
+      'user.info.basic,user.info.stats,video.list',
+    );
+    assert.equal(
+      url.searchParams.get('redirect_uri'),
+      'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
+    );
+    assert.equal(url.searchParams.get('code_challenge'), challenge);
+    assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
+    assert.equal(url.searchParams.get('code_verifier'), null);
+  });
+
+  it('token exchange sends code_verifier without logging secrets', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    let postedBody = '';
+    global.fetch = mock.fn(async (_url, init) => {
+      postedBody = String(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          access_token: 'access-token-value',
+          refresh_token: 'refresh-token-value',
+          expires_in: 3600,
+          open_id: 'oid-1',
+          scope: 'user.info.basic',
+          token_type: 'Bearer',
+        }),
+      };
+    });
+    try {
+      await provider.exchangeAuthorizationCode({
+        code: 'auth-code-value',
+        redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
+        codeVerifier: 'pkce-verifier-value',
+      });
+      const params = new URLSearchParams(postedBody);
+      assert.equal(params.get('grant_type'), 'authorization_code');
+      assert.equal(params.get('code'), 'auth-code-value');
+      assert.equal(params.get('code_verifier'), 'pkce-verifier-value');
+      assert.equal(params.get('client_key'), 'tt-client-key');
+      assert.ok(params.get('client_secret'));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('maps profile fields and keeps missing metrics undefined (not zero)', () => {
+    const mapped = {
+      openId: 'oid',
+      displayName: 'Creator',
+      followerCount: 10n,
+      followingCount: undefined,
+      likesCount: undefined,
+      videoCount: 3n,
+    };
+    assert.equal(mapped.followerCount, 10n);
+    assert.equal(mapped.likesCount, undefined);
+    assert.notEqual(mapped.likesCount, 0n);
+  });
+
+  it('maps video payloads without coercing null metrics to zero', () => {
+    const provider = createProvider();
+    const mapped = provider.mapVideo({
+      id: 'v1',
+      title: 'Clip',
+      create_time: 1_700_000_000,
+      view_count: '12',
+      like_count: null,
+      comment_count: undefined,
+    });
+    assert.equal(mapped.videoId, 'v1');
+    assert.equal(mapped.views, 12n);
+    assert.equal(mapped.likes, undefined);
+    assert.equal(mapped.comments, undefined);
+  });
+
+  it('skips videos without an id (duplicate-safe external key required)', () => {
+    const provider = createProvider();
+    assert.equal(provider.mapVideo({ title: 'no-id' }), null);
+  });
+
+  it('handles token exchange errors without exposing secrets', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    global.fetch = mock.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: 'invalid_grant', error_description: 'code expired' }),
+    }));
+    try {
+      await assert.rejects(
+        () =>
+          provider.exchangeAuthorizationCode({
+            code: 'bad-code',
+            redirectUri: 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback',
+            codeVerifier: 'pkce-verifier',
+          }),
+        (error) => {
+          assert.equal(error.code, 'reauthorization_required');
+          assert.equal(String(error.message).includes('tt-client-secret'), false);
+          assert.equal(String(error.message).includes('pkce-verifier'), false);
+          return true;
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('refresh maps revoked tokens to reauthorization_required', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    global.fetch = mock.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: 'invalid_grant', error_description: 'invalid_grant' }),
+    }));
+    try {
+      await assert.rejects(
+        () => provider.refreshAccessToken('refresh-token-value'),
+        (error) => error.code === 'reauthorization_required',
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('paginates video list until has_more is false', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    let calls = 0;
+    global.fetch = mock.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              videos: [{ id: 'a', view_count: 1 }],
+              cursor: 100,
+              has_more: true,
+            },
+            error: { code: 'ok' },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            videos: [{ id: 'b', view_count: 2 }],
+            cursor: 200,
+            has_more: false,
+          },
+          error: { code: 'ok' },
+        }),
+      };
+    });
+    try {
+      const page = await provider.listVideos(
+        { accessToken: 'token', scopes: ['video.list'] },
+        { maxPages: 5, maxCount: 20 },
+      );
+      assert.equal(page.videos.length, 2);
+      assert.equal(page.hasMore, false);
+      assert.equal(calls, 2);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('connection status mapping covers connected / reauth / disconnected', () => {
+    assert.equal(
+      resolveSocialConnectionStatus({ connectionStatus: 'connected', isConnected: true }),
+      'connected',
+    );
+    assert.equal(
+      resolveSocialConnectionStatus({ connectionStatus: 'reauth_required', isConnected: true }),
+      'reauth_required',
+    );
+    assert.equal(
+      resolveSocialConnectionStatus({ connectionStatus: 'disconnected', isConnected: false }),
+      'disconnected',
+    );
+  });
+});

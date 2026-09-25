@@ -10,6 +10,7 @@ import { SocialAccountsModule } from './modules/social-accounts/social-accounts.
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { YoutubeModule } from './modules/youtube/youtube.module';
+import { TikTokModule } from './modules/tiktok/tiktok.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { YoutubeModule } from './modules/youtube/youtube.module';
     AnalyticsModule,
     SyncModule,
     YoutubeModule,
+    TikTokModule,
   ],
 })
 export class AppModule {}

@@ -90,4 +90,62 @@ export class SocialPostRepository {
 
     return post;
   }
+
+  /**
+   * Sum post metrics for videos published within [startDate, endDate] (UTC date-only strings).
+   * Missing metric columns stay null (never coerced to 0 for "unknown").
+   */
+  async sumMetricsPublishedBetween(
+    socialAccountId: bigint,
+    startDate: string,
+    endDate: string,
+  ): Promise<{
+    views: bigint | null;
+    likes: bigint | null;
+    comments: bigint | null;
+    shares: bigint | null;
+    videoCount: number;
+  }> {
+    const start = new Date(`${startDate}T00:00:00.000Z`);
+    const end = new Date(`${endDate}T23:59:59.999Z`);
+
+    const rows = await this.prisma.socialPosts.findMany({
+      where: {
+        socialAccountId,
+        isDeleted: false,
+        publishedAt: { gte: start, lte: end },
+      },
+      include: { postMetrics: true },
+    });
+
+    if (rows.length === 0) {
+      return { views: null, likes: null, comments: null, shares: null, videoCount: 0 };
+    }
+
+    let views: bigint | null = null;
+    let likes: bigint | null = null;
+    let comments: bigint | null = null;
+    let shares: bigint | null = null;
+
+    for (const row of rows) {
+      const metrics = row.postMetrics;
+      if (!metrics) {
+        continue;
+      }
+      if (metrics.viewsCount !== null && metrics.viewsCount !== undefined) {
+        views = (views ?? 0n) + metrics.viewsCount;
+      }
+      if (metrics.likesCount !== null && metrics.likesCount !== undefined) {
+        likes = (likes ?? 0n) + metrics.likesCount;
+      }
+      if (metrics.commentsCount !== null && metrics.commentsCount !== undefined) {
+        comments = (comments ?? 0n) + metrics.commentsCount;
+      }
+      if (metrics.sharesCount !== null && metrics.sharesCount !== undefined) {
+        shares = (shares ?? 0n) + metrics.sharesCount;
+      }
+    }
+
+    return { views, likes, comments, shares, videoCount: rows.length };
+  }
 }

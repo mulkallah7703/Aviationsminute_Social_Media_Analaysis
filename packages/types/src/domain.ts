@@ -4,6 +4,8 @@ export interface OAuthTokenSet {
   expiresAt?: Date;
   scopes: string[];
   tokenType?: string;
+  /** Provider-specific subject id (e.g. TikTok open_id). */
+  openId?: string;
 }
 
 export interface NormalizedSocialProfile {
@@ -71,6 +73,32 @@ export interface YoutubeVideoSnapshot {
   watchTimeSeconds?: bigint;
   subscribersGained?: bigint;
   subscribersLost?: bigint;
+}
+
+export interface TikTokUserSnapshot {
+  openId: string;
+  displayName?: string;
+  avatarUrl?: string;
+  profileUrl?: string;
+  bioDescription?: string;
+  followerCount?: bigint;
+  followingCount?: bigint;
+  likesCount?: bigint;
+  videoCount?: bigint;
+}
+
+export interface TikTokVideoSnapshot {
+  videoId: string;
+  title?: string;
+  description?: string;
+  durationSeconds?: number;
+  coverImageUrl?: string;
+  embedLink?: string;
+  publishedAt?: Date;
+  views?: bigint;
+  likes?: bigint;
+  comments?: bigint;
+  shares?: bigint;
 }
 
 export interface NormalizedPost {

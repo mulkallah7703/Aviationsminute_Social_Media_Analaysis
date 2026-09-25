@@ -52,9 +52,9 @@ export const PLATFORM_CATALOG: readonly PlatformCatalogEntry[] = [
     code: 'tiktok',
     name: 'TikTok',
     nameAr: 'تيك توك',
-    availability: 'coming_soon',
-    comingSoonLabel: 'Coming Soon',
-    comingSoonLabelAr: 'ستتاح قريبًا',
+    availability: 'available',
+    comingSoonLabel: 'Connect TikTok',
+    comingSoonLabelAr: 'ربط تيك توك',
   },
   {
     code: 'linkedin',
