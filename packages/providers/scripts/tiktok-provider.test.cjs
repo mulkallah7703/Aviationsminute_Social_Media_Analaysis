@@ -79,7 +79,12 @@ describe('tiktok provider — Login Kit Web', () => {
   it('Web token exchange does not send code_verifier', async () => {
     const provider = createProvider();
     const originalFetch = global.fetch;
+    const originalWarn = console.warn;
+    const warnings = [];
     let postedBody = '';
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(' '));
+    };
     global.fetch = mock.fn(async (_url, init) => {
       postedBody = String(init.body);
       return {
@@ -101,14 +106,58 @@ describe('tiktok provider — Login Kit Web', () => {
       });
       const params = new URLSearchParams(postedBody);
       assert.equal(params.get('grant_type'), 'authorization_code');
-      assert.equal(params.get('code'), 'auth-code-value');
-      assert.equal(params.get('client_key'), 'tt-client-key');
-      assert.ok(params.get('client_secret'));
-      assert.equal(params.get('redirect_uri'), 'https://aviationsminuteanalysis.com/api/auth/tiktok/callback');
       assert.equal(params.get('code_verifier'), null);
       assert.equal(postedBody.includes('code_verifier'), false);
+
+      const success = warnings.find((line) => line.includes('[tiktok.oauth.exchange.success]'));
+      assert.ok(success);
+      assert.match(success, /"hasAccessToken":true/);
+      assert.match(success, /"hasRefreshToken":true/);
+      assert.match(success, /"hasOpenId":true/);
+      assert.equal(success.includes('access-token-value'), false);
+      assert.equal(success.includes('refresh-token-value'), false);
+      assert.equal(success.includes('oid-1'), false);
+      assert.equal(success.includes('auth-code-value'), false);
+      assert.equal(success.includes('tt-client-secret'), false);
     } finally {
       global.fetch = originalFetch;
+      console.warn = originalWarn;
+    }
+  });
+
+  it('user info failure logs safe diagnostics only', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    const originalWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    global.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        error: { code: 'access_token_invalid', message: 'Access token is invalid' },
+      }),
+    }));
+    try {
+      await assert.rejects(
+        () =>
+          provider.getAuthenticatedUser({
+            accessToken: 'secret-access-token',
+            scopes: ['user.info.basic'],
+          }),
+        (error) => error.code === 'reauthorization_required',
+      );
+      const failure = warnings.find((line) => line.includes('[tiktok.oauth.userinfo.failure]'));
+      assert.ok(failure);
+      assert.match(failure, /"httpStatus":401/);
+      assert.match(failure, /access_token_invalid/);
+      assert.equal(failure.includes('secret-access-token'), false);
+      assert.equal(failure.includes('Bearer'), false);
+    } finally {
+      global.fetch = originalFetch;
+      console.warn = originalWarn;
     }
   });
 

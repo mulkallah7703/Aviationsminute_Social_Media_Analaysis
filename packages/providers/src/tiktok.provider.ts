@@ -186,7 +186,19 @@ export class TikTokProvider implements TikTokPlatformProvider {
     if (request.codeVerifier) {
       body.set('code_verifier', request.codeVerifier);
     }
-    return this.requestToken(body);
+    const tokens = await this.requestToken(body);
+    // Diagnostic only: never include token values, secrets, or codes.
+    console.warn(
+      '[tiktok.oauth.exchange.success]',
+      JSON.stringify({
+        hasAccessToken: Boolean(tokens.accessToken),
+        hasRefreshToken: Boolean(tokens.refreshToken),
+        hasOpenId: Boolean(tokens.openId),
+        scopes: tokens.scopes,
+        expiresAt: tokens.expiresAt ? tokens.expiresAt.toISOString() : null,
+      }),
+    );
+    return tokens;
   }
 
   async refreshAccessToken(refreshToken: string): Promise<OAuthTokenSet> {
@@ -203,24 +215,75 @@ export class TikTokProvider implements TikTokPlatformProvider {
   async getAuthenticatedUser(tokens: OAuthTokenSet): Promise<TikTokUserSnapshot | null> {
     const url = new URL(USER_INFO_URL);
     url.searchParams.set('fields', USER_INFO_FIELDS);
-    const json = await this.authorizedJson<{
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+      },
+    });
+    const json = (await response.json().catch(() => ({}))) as {
       data?: { user?: Record<string, unknown> };
       error?: { code?: string; message?: string };
-    }>(tokens, url.toString(), { method: 'GET' });
+      error_description?: string;
+      message?: string;
+    };
+
+    const errorCode = json.error?.code;
+    if (!response.ok || (errorCode && errorCode !== 'ok')) {
+      console.warn(
+        '[tiktok.oauth.userinfo.failure]',
+        JSON.stringify({
+          httpStatus: response.status,
+          error: typeof errorCode === 'string' ? errorCode : undefined,
+          message:
+            typeof json.error?.message === 'string'
+              ? json.error.message
+              : typeof json.message === 'string'
+                ? json.message
+                : undefined,
+          error_description:
+            typeof json.error_description === 'string' ? json.error_description : undefined,
+        }),
+      );
+      throw mapTikTokApiError(response.status, json);
+    }
 
     const user = json.data?.user;
     if (!user) {
+      console.warn(
+        '[tiktok.oauth.userinfo.success]',
+        JSON.stringify({ displayName: null, hasUser: false }),
+      );
       return null;
     }
 
     const openId = typeof user.open_id === 'string' ? user.open_id : tokens.openId;
     if (!openId) {
+      console.warn(
+        '[tiktok.oauth.userinfo.success]',
+        JSON.stringify({
+          displayName: typeof user.display_name === 'string' ? user.display_name : null,
+          hasUser: true,
+          hasOpenId: false,
+        }),
+      );
       return null;
     }
 
+    const displayName = typeof user.display_name === 'string' ? user.display_name : undefined;
+    // Diagnostic only: omit openId; never log tokens.
+    console.warn(
+      '[tiktok.oauth.userinfo.success]',
+      JSON.stringify({
+        displayName: displayName ?? null,
+        hasUser: true,
+      }),
+    );
+
     return {
       openId,
-      displayName: typeof user.display_name === 'string' ? user.display_name : undefined,
+      displayName,
       avatarUrl: typeof user.avatar_url === 'string' ? user.avatar_url : undefined,
       profileUrl: typeof user.profile_deep_link === 'string' ? user.profile_deep_link : undefined,
       bioDescription: typeof user.bio_description === 'string' ? user.bio_description : undefined,
