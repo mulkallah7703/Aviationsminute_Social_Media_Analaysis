@@ -86,6 +86,9 @@ export const OAUTH_ERROR_CODES = [
   'access_denied',
   'invalid_grant',
   'invalid_client',
+  'invalid_request',
+  'invalid_scope',
+  'unauthorized_client',
   'redirect_uri_mismatch',
   'missing_code',
   'missing_state',
@@ -109,12 +112,24 @@ export const OAUTH_ERROR_MESSAGES: Record<OAuthErrorCode, { en: string; ar: stri
     ar: 'تم رفض التفويض.',
   },
   invalid_grant: {
-    en: 'The authorization code is invalid or has expired. Try connecting again.',
-    ar: 'رمز التفويض غير صالح أو منتهٍ. حاول الربط مرة أخرى.',
+    en: 'The authorization code was rejected or has expired. Try connecting again.',
+    ar: 'تم رفض رمز التفويض أو انتهت صلاحيته. حاول الربط مرة أخرى.',
   },
   invalid_client: {
     en: 'The OAuth client configuration was rejected.',
     ar: 'تم رفض إعداد تطبيق OAuth.',
+  },
+  invalid_request: {
+    en: 'The OAuth request was invalid. Try connecting again.',
+    ar: 'طلب التفويض غير صالح. حاول الربط مرة أخرى.',
+  },
+  invalid_scope: {
+    en: 'The requested OAuth scopes are invalid or not approved.',
+    ar: 'نطاقات التفويض غير صالحة أو غير معتمدة.',
+  },
+  unauthorized_client: {
+    en: 'This OAuth client is not authorized for the requested operation.',
+    ar: 'تطبيق OAuth غير مصرح له بهذه العملية.',
   },
   redirect_uri_mismatch: {
     en: 'The redirect URI does not match the OAuth client configuration.',

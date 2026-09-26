@@ -147,7 +147,7 @@ export class AuthService {
       if (!env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET || !env.TIKTOK_REDIRECT_URI) {
         throw new OAuthFlowError('invalid_client', 'TikTok OAuth is not configured.');
       }
-      // Login Kit Web: CSRF state only. PKCE is Desktop/iOS/Android — not used for Web.
+      // Login Kit Web: CSRF state only. Redirect URI comes from provider config (= TIKTOK_REDIRECT_URI).
       const state = this.cookies.createOAuthState();
       this.cookies.setOAuthState(response, state);
       const tiktokPlatform = await this.platforms.findByCode('tiktok');
@@ -192,13 +192,16 @@ export class AuthService {
       }
 
       const user = await this.resolveWorkspaceUser(request, response);
-      // Web confidential-client exchange: client_secret only (no code_verifier).
+
+      // Exchange once. Provider uses configured redirect URI (same as authorize).
       const tokens = await this.tiktokProvider().exchangeAuthorizationCode({
         code: query.code,
         redirectUri: env.TIKTOK_REDIRECT_URI,
       });
 
-      const profile = await this.tiktokProvider().getAuthenticatedUser(tokens);
+      const profile = await this.tiktokProvider().getAuthenticatedUser(tokens, {
+        phase: 'oauth_callback',
+      });
       if (!profile) {
         throw new OAuthFlowError(
           'no_tiktok_user',

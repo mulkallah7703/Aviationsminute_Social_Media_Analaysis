@@ -74,7 +74,10 @@ const VIDEO_LIST_FIELDS = [
 ].join(',');
 
 export interface TikTokPlatformProvider extends SocialPlatformProvider {
-  getAuthenticatedUser(tokens: OAuthTokenSet): Promise<TikTokUserSnapshot | null>;
+  getAuthenticatedUser(
+    tokens: OAuthTokenSet,
+    options?: { phase?: 'oauth_callback' | 'api' },
+  ): Promise<TikTokUserSnapshot | null>;
   listVideos(
     tokens: OAuthTokenSet,
     options?: { cursor?: number; maxCount?: number; maxPages?: number },
@@ -92,27 +95,45 @@ function parseOptionalBigInt(value: unknown): bigint | undefined {
   }
 }
 
-function mapTikTokOAuthError(payload: {
+/** Maps TikTok OAuth token-endpoint errors to precise codes (Web Login Kit). */
+export function mapTikTokOAuthError(payload: {
   error?: string;
   error_description?: string;
   message?: string;
+  log_id?: string;
 }): OAuthFlowError {
-  const code = (payload.error ?? '').toLowerCase();
-  const description = payload.error_description ?? payload.message ?? '';
+  const code = (payload.error ?? '').toLowerCase().trim();
+  const description = (payload.error_description ?? payload.message ?? '').toLowerCase();
 
   if (code === 'access_denied') {
     return new OAuthFlowError('access_denied', 'TikTok authorization was denied.');
   }
-  if (code === 'invalid_grant' || description.toLowerCase().includes('invalid_grant')) {
+  if (code === 'invalid_grant') {
     return new OAuthFlowError(
-      'reauthorization_required',
-      'TikTok access was revoked. Connect TikTok again.',
+      'invalid_grant',
+      'The TikTok authorization code was rejected or has expired. Try connecting again.',
     );
   }
   if (code === 'invalid_client') {
     return new OAuthFlowError('invalid_client', 'TikTok rejected the OAuth client configuration.');
   }
-  if (code.includes('redirect') || description.toLowerCase().includes('redirect_uri')) {
+  if (code === 'invalid_request') {
+    return new OAuthFlowError('invalid_request', 'The TikTok OAuth token request was invalid.');
+  }
+  if (code === 'invalid_scope') {
+    return new OAuthFlowError('invalid_scope', 'The TikTok OAuth scopes are invalid or not approved.');
+  }
+  if (code === 'unauthorized_client') {
+    return new OAuthFlowError(
+      'unauthorized_client',
+      'This TikTok client is not authorized for the requested grant.',
+    );
+  }
+  if (
+    code === 'redirect_uri_mismatch' ||
+    code.includes('redirect') ||
+    description.includes('redirect_uri')
+  ) {
     return new OAuthFlowError(
       'redirect_uri_mismatch',
       'The TikTok redirect URI does not match the app configuration.',
@@ -121,7 +142,11 @@ function mapTikTokOAuthError(payload: {
   return new OAuthFlowError('token_exchange_failed', 'TikTok token exchange failed.');
 }
 
-function mapTikTokApiError(status: number, body: unknown): OAuthFlowError {
+function mapTikTokApiError(
+  status: number,
+  body: unknown,
+  phase: 'oauth_callback' | 'api' = 'api',
+): OAuthFlowError {
   const payload =
     typeof body === 'object' && body !== null
       ? (body as {
@@ -131,9 +156,15 @@ function mapTikTokApiError(status: number, body: unknown): OAuthFlowError {
         })
       : undefined;
   const code = String(payload?.error?.code ?? payload?.error_code ?? '').toLowerCase();
-  const message = payload?.error?.message ?? payload?.message ?? '';
 
   if (status === 401 || code.includes('access_token') || code.includes('unauthorized')) {
+    // During the initial OAuth callback, a user.info failure is not "revoked access".
+    if (phase === 'oauth_callback') {
+      return new OAuthFlowError(
+        'tiktok_api_error',
+        'TikTok user info request failed after authorization.',
+      );
+    }
     return new OAuthFlowError(
       'reauthorization_required',
       'TikTok rejected the stored credentials. Connect TikTok again.',
@@ -142,10 +173,7 @@ function mapTikTokApiError(status: number, body: unknown): OAuthFlowError {
   if (status === 429 || code.includes('rate_limit')) {
     return new OAuthFlowError('quota_exceeded', 'The TikTok API rate limit was exceeded.');
   }
-  return new OAuthFlowError(
-    'tiktok_api_error',
-    message ? 'TikTok could not complete the request.' : 'TikTok could not complete the request.',
-  );
+  return new OAuthFlowError('tiktok_api_error', 'TikTok could not complete the request.');
 }
 
 export class TikTokProvider implements TikTokPlatformProvider {
@@ -157,15 +185,21 @@ export class TikTokProvider implements TikTokPlatformProvider {
     this.isImplemented = Boolean(config?.clientKey && config.clientSecret && config.redirectUri);
   }
 
+  /**
+   * Login Kit Web authorize URL.
+   * Uses configured redirectUri as the single source of truth (must match portal + token exchange).
+   * PKCE params are omitted unless explicitly provided for a future Desktop flow.
+   */
   getAuthorizationUrl(request: AuthorizationRequest): Promise<string> {
     const cfg = this.requireConfig();
+    const redirectUri = cfg.redirectUri;
     const url = new URL(AUTH_URL);
     url.searchParams.set('client_key', cfg.clientKey);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', cfg.scopes.join(','));
-    url.searchParams.set('redirect_uri', request.redirectUri);
+    url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('state', request.state);
-    // Optional PKCE only when explicitly provided (Desktop). Web omits these.
+    // Desktop/mobile only — never set by the Web OAuth path.
     if (request.codeChallenge) {
       url.searchParams.set('code_challenge', request.codeChallenge);
       url.searchParams.set('code_challenge_method', request.codeChallengeMethod ?? 'S256');
@@ -173,6 +207,11 @@ export class TikTokProvider implements TikTokPlatformProvider {
     return Promise.resolve(url.toString());
   }
 
+  /**
+   * Web confidential-client token exchange.
+   * redirect_uri always comes from provider config (same value as authorize).
+   * code_verifier is omitted unless explicitly provided for Desktop.
+   */
   async exchangeAuthorizationCode(request: AuthorizationCodeExchange): Promise<OAuthTokenSet> {
     const cfg = this.requireConfig();
     const body = new URLSearchParams({
@@ -180,25 +219,12 @@ export class TikTokProvider implements TikTokPlatformProvider {
       client_secret: cfg.clientSecret,
       code: request.code,
       grant_type: 'authorization_code',
-      redirect_uri: request.redirectUri,
+      redirect_uri: cfg.redirectUri,
     });
-    // Optional PKCE verifier only when explicitly provided (Desktop). Web omits it.
     if (request.codeVerifier) {
       body.set('code_verifier', request.codeVerifier);
     }
-    const tokens = await this.requestToken(body);
-    // Diagnostic only: never include token values, secrets, or codes.
-    console.warn(
-      '[tiktok.oauth.exchange.success]',
-      JSON.stringify({
-        hasAccessToken: Boolean(tokens.accessToken),
-        hasRefreshToken: Boolean(tokens.refreshToken),
-        hasOpenId: Boolean(tokens.openId),
-        scopes: tokens.scopes,
-        expiresAt: tokens.expiresAt ? tokens.expiresAt.toISOString() : null,
-      }),
-    );
-    return tokens;
+    return this.requestToken(body);
   }
 
   async refreshAccessToken(refreshToken: string): Promise<OAuthTokenSet> {
@@ -209,10 +235,28 @@ export class TikTokProvider implements TikTokPlatformProvider {
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     });
-    return this.requestToken(body);
+    try {
+      return await this.requestToken(body);
+    } catch (error) {
+      // Refresh invalid_grant means the stored grant can no longer be used.
+      if (
+        error instanceof OAuthFlowError &&
+        (error.code === 'invalid_grant' || error.code === 'unauthorized_client')
+      ) {
+        throw new OAuthFlowError(
+          'reauthorization_required',
+          'TikTok access was revoked. Connect TikTok again.',
+        );
+      }
+      throw error;
+    }
   }
 
-  async getAuthenticatedUser(tokens: OAuthTokenSet): Promise<TikTokUserSnapshot | null> {
+  async getAuthenticatedUser(
+    tokens: OAuthTokenSet,
+    options?: { phase?: 'oauth_callback' | 'api' },
+  ): Promise<TikTokUserSnapshot | null> {
+    const phase = options?.phase ?? 'api';
     const url = new URL(USER_INFO_URL);
     url.searchParams.set('fields', USER_INFO_FIELDS);
 
@@ -231,59 +275,22 @@ export class TikTokProvider implements TikTokPlatformProvider {
 
     const errorCode = json.error?.code;
     if (!response.ok || (errorCode && errorCode !== 'ok')) {
-      console.warn(
-        '[tiktok.oauth.userinfo.failure]',
-        JSON.stringify({
-          httpStatus: response.status,
-          error: typeof errorCode === 'string' ? errorCode : undefined,
-          message:
-            typeof json.error?.message === 'string'
-              ? json.error.message
-              : typeof json.message === 'string'
-                ? json.message
-                : undefined,
-          error_description:
-            typeof json.error_description === 'string' ? json.error_description : undefined,
-        }),
-      );
-      throw mapTikTokApiError(response.status, json);
+      throw mapTikTokApiError(response.status, json, phase);
     }
 
     const user = json.data?.user;
     if (!user) {
-      console.warn(
-        '[tiktok.oauth.userinfo.success]',
-        JSON.stringify({ displayName: null, hasUser: false }),
-      );
       return null;
     }
 
     const openId = typeof user.open_id === 'string' ? user.open_id : tokens.openId;
     if (!openId) {
-      console.warn(
-        '[tiktok.oauth.userinfo.success]',
-        JSON.stringify({
-          displayName: typeof user.display_name === 'string' ? user.display_name : null,
-          hasUser: true,
-          hasOpenId: false,
-        }),
-      );
       return null;
     }
 
-    const displayName = typeof user.display_name === 'string' ? user.display_name : undefined;
-    // Diagnostic only: omit openId; never log tokens.
-    console.warn(
-      '[tiktok.oauth.userinfo.success]',
-      JSON.stringify({
-        displayName: displayName ?? null,
-        hasUser: true,
-      }),
-    );
-
     return {
       openId,
-      displayName,
+      displayName: typeof user.display_name === 'string' ? user.display_name : undefined,
       avatarUrl: typeof user.avatar_url === 'string' ? user.avatar_url : undefined,
       profileUrl: typeof user.profile_deep_link === 'string' ? user.profile_deep_link : undefined,
       bioDescription: typeof user.bio_description === 'string' ? user.bio_description : undefined,
@@ -462,21 +469,17 @@ export class TikTokProvider implements TikTokPlatformProvider {
       error?: string;
       error_description?: string;
       message?: string;
+      log_id?: string;
     };
 
     if (!response.ok || !json.access_token) {
-      // Diagnostic only: never include tokens, secrets, codes, or request body.
-      console.warn(
-        '[tiktok.oauth.token]',
-        JSON.stringify({
-          httpStatus: response.status,
-          error: typeof json.error === 'string' ? json.error : undefined,
-          error_description:
-            typeof json.error_description === 'string' ? json.error_description : undefined,
-          message: typeof json.message === 'string' ? json.message : undefined,
-        }),
-      );
-      throw mapTikTokOAuthError(json);
+      throw mapTikTokOAuthError({
+        error: typeof json.error === 'string' ? json.error : undefined,
+        error_description:
+          typeof json.error_description === 'string' ? json.error_description : undefined,
+        message: typeof json.message === 'string' ? json.message : undefined,
+        log_id: typeof json.log_id === 'string' ? json.log_id : undefined,
+      });
     }
 
     const expiresAt =
