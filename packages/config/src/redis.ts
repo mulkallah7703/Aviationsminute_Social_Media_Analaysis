@@ -15,8 +15,8 @@ export function parseRedisUrl(redisUrl: string): RedisConnectionOptions {
   return {
     host: parsed.hostname || '127.0.0.1',
     port: parsed.port ? Number(parsed.port) : 6379,
-    username: parsed.username || undefined,
-    password: parsed.password || undefined,
+    username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+    password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
     db: dbPath ? Number(dbPath) : undefined,
     ...(useTls ? { tls: {} } : {}),
   };
