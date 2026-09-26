@@ -19,6 +19,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@sma/config": "workspace:*",
     "@sma/types": "workspace:*",
     "googleapis": "^159.0.0"
   },

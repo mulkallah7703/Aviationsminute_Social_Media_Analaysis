@@ -274,6 +274,9 @@ importers:
 
   packages/providers:
     dependencies:
+      '@sma/config':
+        specifier: workspace:*
+        version: link:../config
       '@sma/types':
         specifier: workspace:*
         version: link:../types

@@ -9,6 +9,7 @@ import {
 import {
   OAuthFlowError,
   ProviderCapabilityNotReadyError,
+  TikTokApiError,
   type PlatformProviderRegistry,
   type TikTokPlatformProvider,
   type YouTubePlatformProvider,
@@ -228,7 +229,13 @@ export class AuthService {
       return { status: 'connected' };
     } catch (error) {
       const code = this.toErrorCode(error);
-      this.logger.warn(`TikTok OAuth callback failed: ${code}`);
+      if (error instanceof TikTokApiError) {
+        this.logger.warn(
+          `TikTok OAuth callback failed: ${code} (tikTokCode=${error.tikTokCode ?? 'n/a'} httpStatus=${error.httpStatus} logId=${error.logId ?? 'n/a'})`,
+        );
+      } else {
+        this.logger.warn(`TikTok OAuth callback failed: ${code}`);
+      }
       return { status: 'error', code };
     } finally {
       this.cookies.clearOAuthState(response);

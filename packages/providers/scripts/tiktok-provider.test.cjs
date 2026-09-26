@@ -159,7 +159,7 @@ describe('tiktok provider — Login Kit Web', () => {
     }
   });
 
-  it('oauth_callback user info 401 is tiktok_api_error not reauthorization_required', async () => {
+  it('user info 401 / access_token_invalid → reauthorization_required with preserved TikTok fields', async () => {
     const provider = createProvider();
     const originalFetch = global.fetch;
     global.fetch = mock.fn(async () => ({
@@ -167,6 +167,7 @@ describe('tiktok provider — Login Kit Web', () => {
       status: 401,
       json: async () => ({
         error: { code: 'access_token_invalid', message: 'Access token is invalid' },
+        log_id: 'log-401',
       }),
     }));
     try {
@@ -176,7 +177,87 @@ describe('tiktok provider — Login Kit Web', () => {
             { accessToken: 'secret-access-token', scopes: ['user.info.basic'] },
             { phase: 'oauth_callback' },
           ),
-        (error) => error.code === 'tiktok_api_error',
+        (error) => {
+          assert.equal(error.name, 'TikTokApiError');
+          assert.equal(error.code, 'reauthorization_required');
+          assert.equal(error.httpStatus, 401);
+          assert.equal(error.tikTokCode, 'access_token_invalid');
+          assert.equal(error.tikTokMessage, 'Access token is invalid');
+          assert.equal(error.logId, 'log-401');
+          assert.equal(error.phase, 'oauth_callback');
+          assert.equal(String(error.message).includes('secret-access-token'), false);
+          assert.equal(JSON.stringify(error).includes('secret-access-token'), false);
+          return true;
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('user info 429 → quota_exceeded', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    global.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 429,
+      json: async () => ({
+        error: { code: 'rate_limit_exceeded', message: 'Too many requests' },
+        log_id: 'log-429',
+      }),
+    }));
+    try {
+      await assert.rejects(
+        () =>
+          provider.getAuthenticatedUser({
+            accessToken: 'secret-access-token',
+            scopes: ['user.info.basic'],
+          }),
+        (error) => {
+          assert.equal(error.code, 'quota_exceeded');
+          assert.equal(error.tikTokCode, 'rate_limit_exceeded');
+          assert.equal(error.logId, 'log-429');
+          return true;
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('user info non-auth error → tiktok_api_error with public message and internal fields', async () => {
+    const provider = createProvider();
+    const originalFetch = global.fetch;
+    global.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: { code: 'scope_not_authorized', message: 'The user did not authorize the scope' },
+        error_description: 'Missing user.info.stats',
+        error_code: 4010301,
+        log_id: 'log-scope',
+      }),
+    }));
+    try {
+      await assert.rejects(
+        () =>
+          provider.getAuthenticatedUser(
+            { accessToken: 'secret-access-token', scopes: ['user.info.basic'] },
+            { phase: 'oauth_callback' },
+          ),
+        (error) => {
+          assert.equal(error.name, 'TikTokApiError');
+          assert.equal(error.code, 'tiktok_api_error');
+          assert.equal(error.message, 'TikTok User Info request failed.');
+          assert.equal(error.tikTokCode, 'scope_not_authorized');
+          assert.equal(error.tikTokMessage, 'The user did not authorize the scope');
+          assert.equal(error.errorDescription, 'Missing user.info.stats');
+          assert.equal(error.errorCode, 4010301);
+          assert.equal(error.logId, 'log-scope');
+          assert.equal(error.phase, 'oauth_callback');
+          assert.equal(String(JSON.stringify(error)).includes('secret-access-token'), false);
+          return true;
+        },
       );
     } finally {
       global.fetch = originalFetch;

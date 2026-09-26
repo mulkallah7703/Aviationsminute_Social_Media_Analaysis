@@ -33,3 +33,36 @@ export class OAuthFlowError extends Error {
     this.code = code;
   }
 }
+
+/** Internal TikTok Display API failure with preserved platform error details (never tokens). */
+export class TikTokApiError extends OAuthFlowError {
+  readonly httpStatus: number;
+  readonly tikTokCode: string | null;
+  readonly tikTokMessage: string | null;
+  readonly errorDescription: string | null;
+  readonly logId: string | null;
+  readonly errorCode: string | number | null;
+  readonly phase: 'oauth_callback' | 'normal';
+
+  constructor(input: {
+    oauthCode: OAuthErrorCode;
+    publicMessage: string;
+    httpStatus: number;
+    tikTokCode: string | null;
+    tikTokMessage: string | null;
+    errorDescription: string | null;
+    logId: string | null;
+    errorCode: string | number | null;
+    phase: 'oauth_callback' | 'normal';
+  }) {
+    super(input.oauthCode, input.publicMessage);
+    this.name = 'TikTokApiError';
+    this.httpStatus = input.httpStatus;
+    this.tikTokCode = input.tikTokCode;
+    this.tikTokMessage = input.tikTokMessage;
+    this.errorDescription = input.errorDescription;
+    this.logId = input.logId;
+    this.errorCode = input.errorCode;
+    this.phase = input.phase;
+  }
+}

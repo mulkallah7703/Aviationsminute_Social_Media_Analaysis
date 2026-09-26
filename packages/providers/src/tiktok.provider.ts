@@ -1,14 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { createLogger } from '@sma/config';
 import type {
   NormalizedAccountMetrics,
   NormalizedPostMetrics,
   NormalizedPostPage,
   NormalizedSocialProfile,
+  OAuthErrorCode,
   OAuthTokenSet,
   TikTokUserSnapshot,
   TikTokVideoSnapshot,
 } from '@sma/types';
-import { OAuthFlowError, ProviderCapabilityNotReadyError } from './errors';
+import { OAuthFlowError, ProviderCapabilityNotReadyError, TikTokApiError } from './errors';
 import type {
   AuthorizationCodeExchange,
   AuthorizationRequest,
@@ -21,6 +23,8 @@ const AUTH_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/';
 const VIDEO_LIST_URL = 'https://open.tiktokapis.com/v2/video/list/';
+
+const logger = createLogger({ name: 'tiktok-provider' });
 
 /** RFC 7636 unreserved characters; TikTok Desktop requires 43–128 length. */
 const PKCE_ALPHABET =
@@ -146,38 +150,114 @@ export function mapTikTokOAuthError(payload: {
   return new OAuthFlowError('token_exchange_failed', 'TikTok token exchange failed.');
 }
 
+function extractTikTokUserInfoFailure(
+  status: number,
+  body: unknown,
+): {
+  httpStatus: number;
+  tikTokCode: string | null;
+  tikTokMessage: string | null;
+  errorDescription: string | null;
+  logId: string | null;
+  errorCode: string | number | null;
+} {
+  const payload =
+    typeof body === 'object' && body !== null
+      ? (body as {
+          error?: string | { code?: string; message?: string };
+          error_description?: string;
+          error_code?: number | string;
+          message?: string;
+          log_id?: string;
+        })
+      : undefined;
+
+  const nested =
+    payload?.error && typeof payload.error === 'object' ? payload.error : undefined;
+  const flatError = typeof payload?.error === 'string' ? payload.error : undefined;
+
+  return {
+    httpStatus: status,
+    tikTokCode:
+      typeof nested?.code === 'string'
+        ? nested.code
+        : typeof flatError === 'string'
+          ? flatError
+          : null,
+    tikTokMessage:
+      typeof nested?.message === 'string'
+        ? nested.message
+        : typeof payload?.message === 'string'
+          ? payload.message
+          : null,
+    errorDescription:
+      typeof payload?.error_description === 'string' ? payload.error_description : null,
+    logId: typeof payload?.log_id === 'string' ? payload.log_id : null,
+    errorCode:
+      payload?.error_code !== undefined && payload?.error_code !== null
+        ? payload.error_code
+        : null,
+  };
+}
+
+function classifyTikTokUserInfoFailure(
+  httpStatus: number,
+  tikTokCode: string | null,
+): { oauthCode: OAuthErrorCode; publicMessage: string } {
+  const code = (tikTokCode ?? '').toLowerCase();
+  if (
+    httpStatus === 401 ||
+    code.includes('access_token') ||
+    code.includes('unauthorized')
+  ) {
+    return {
+      oauthCode: 'reauthorization_required',
+      publicMessage: 'TikTok rejected the stored credentials. Connect TikTok again.',
+    };
+  }
+  if (httpStatus === 429 || code.includes('rate_limit')) {
+    return {
+      oauthCode: 'quota_exceeded',
+      publicMessage: 'The TikTok API rate limit was exceeded.',
+    };
+  }
+  return {
+    oauthCode: 'tiktok_api_error',
+    publicMessage: 'TikTok User Info request failed.',
+  };
+}
+
 function mapTikTokApiError(
   status: number,
   body: unknown,
   phase: 'oauth_callback' | 'normal' = 'normal',
-): OAuthFlowError {
-  const payload =
-    typeof body === 'object' && body !== null
-      ? (body as {
-          error?: { code?: string; message?: string };
-          error_code?: number | string;
-          message?: string;
-        })
-      : undefined;
-  const code = String(payload?.error?.code ?? payload?.error_code ?? '').toLowerCase();
+): TikTokApiError {
+  const details = extractTikTokUserInfoFailure(status, body);
+  const classified = classifyTikTokUserInfoFailure(details.httpStatus, details.tikTokCode);
 
-  if (status === 401 || code.includes('access_token') || code.includes('unauthorized')) {
-    // During the initial OAuth callback, a user.info failure is not "revoked access".
-    if (phase === 'oauth_callback') {
-      return new OAuthFlowError(
-        'tiktok_api_error',
-        'TikTok user info request failed after authorization.',
-      );
-    }
-    return new OAuthFlowError(
-      'reauthorization_required',
-      'TikTok rejected the stored credentials. Connect TikTok again.',
-    );
-  }
-  if (status === 429 || code.includes('rate_limit')) {
-    return new OAuthFlowError('quota_exceeded', 'The TikTok API rate limit was exceeded.');
-  }
-  return new OAuthFlowError('tiktok_api_error', 'TikTok could not complete the request.');
+  logger.warn(
+    {
+      phase,
+      httpStatus: details.httpStatus,
+      tikTokCode: details.tikTokCode,
+      tikTokMessage: details.tikTokMessage,
+      errorDescription: details.errorDescription,
+      logId: details.logId,
+    },
+    '[tiktok.userinfo.failure]',
+  );
+
+  return new TikTokApiError({
+    oauthCode: classified.oauthCode,
+    publicMessage: classified.publicMessage,
+    httpStatus: details.httpStatus,
+    tikTokCode: details.tikTokCode,
+    tikTokMessage: details.tikTokMessage,
+    errorDescription: details.errorDescription,
+    logId: details.logId,
+    errorCode: details.errorCode,
+    phase,
+  });
 }
 
 export class TikTokProvider implements TikTokPlatformProvider {
@@ -272,12 +352,15 @@ export class TikTokProvider implements TikTokPlatformProvider {
     });
     const json = (await response.json().catch(() => ({}))) as {
       data?: { user?: Record<string, unknown> };
-      error?: { code?: string; message?: string };
+      error?: string | { code?: string; message?: string };
       error_description?: string;
+      error_code?: number | string;
       message?: string;
+      log_id?: string;
     };
 
-    const errorCode = json.error?.code;
+    const errorCode =
+      typeof json.error === 'object' && json.error !== null ? json.error.code : undefined;
     if (!response.ok || (errorCode && errorCode !== 'ok')) {
       throw mapTikTokApiError(response.status, json, phase);
     }

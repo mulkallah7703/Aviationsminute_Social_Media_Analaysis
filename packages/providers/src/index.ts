@@ -10,6 +10,7 @@ export {
   ProviderCapabilityNotReadyError,
   UnsupportedPlatformError,
   OAuthFlowError,
+  TikTokApiError,
 } from './errors';
 export { YouTubeProvider, type YouTubePlatformProvider } from './youtube.provider';
 export {
