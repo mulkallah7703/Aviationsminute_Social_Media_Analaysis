@@ -344,12 +344,18 @@ export class TikTokProvider implements TikTokPlatformProvider {
     const url = new URL(USER_INFO_URL);
     url.searchParams.set('fields', USER_INFO_FIELDS);
 
+    logger.info({ phase }, '[tiktok.userinfo.start]');
+    const startedAt = Date.now();
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${tokens.accessToken}`,
       },
     });
+    logger.info(
+      { httpStatus: response.status, elapsedMs: Date.now() - startedAt },
+      '[tiktok.userinfo.response]',
+    );
     const json = (await response.json().catch(() => ({}))) as {
       data?: { user?: Record<string, unknown> };
       error?: string | { code?: string; message?: string };
@@ -361,6 +367,14 @@ export class TikTokProvider implements TikTokPlatformProvider {
 
     const errorCode =
       typeof json.error === 'object' && json.error !== null ? json.error.code : undefined;
+    logger.info(
+      {
+        httpStatus: response.status,
+        tikTokCode:
+          errorCode ?? (typeof json.error === 'string' ? json.error : null),
+      },
+      '[tiktok.userinfo.parsed]',
+    );
     if (!response.ok || (errorCode && errorCode !== 'ok')) {
       throw mapTikTokApiError(response.status, json, phase);
     }
@@ -537,6 +551,8 @@ export class TikTokProvider implements TikTokPlatformProvider {
   }
 
   private async requestToken(body: URLSearchParams): Promise<OAuthTokenSet> {
+    logger.info('[tiktok.oauth.token.start]');
+    const startedAt = Date.now();
     const response = await fetch(TOKEN_URL, {
       method: 'POST',
       headers: {
@@ -545,6 +561,10 @@ export class TikTokProvider implements TikTokPlatformProvider {
       },
       body,
     });
+    logger.info(
+      { httpStatus: response.status, elapsedMs: Date.now() - startedAt },
+      '[tiktok.oauth.token.response]',
+    );
     const json = (await response.json().catch(() => ({}))) as {
       access_token?: string;
       refresh_token?: string;
@@ -558,6 +578,14 @@ export class TikTokProvider implements TikTokPlatformProvider {
       message?: string;
       log_id?: string;
     };
+    logger.info(
+      {
+        httpStatus: response.status,
+        hasAccessToken: typeof json.access_token === 'string' && json.access_token.length > 0,
+        scope: typeof json.scope === 'string' ? json.scope : null,
+      },
+      '[tiktok.oauth.token.parsed]',
+    );
 
     if (!response.ok || !json.access_token) {
       throw mapTikTokOAuthError({
