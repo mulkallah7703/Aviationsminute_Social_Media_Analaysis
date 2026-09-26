@@ -15,6 +15,7 @@ export { YouTubeProvider, type YouTubePlatformProvider } from './youtube.provide
 export {
   TikTokProvider,
   type TikTokPlatformProvider,
+  type TikTokUserInfoOptions,
   createTikTokCodeVerifier,
   createTikTokCodeChallenge,
   mapTikTokOAuthError,

@@ -73,10 +73,14 @@ const VIDEO_LIST_FIELDS = [
   'view_count',
 ].join(',');
 
+export type TikTokUserInfoOptions = {
+  phase?: 'oauth_callback' | 'normal';
+};
+
 export interface TikTokPlatformProvider extends SocialPlatformProvider {
   getAuthenticatedUser(
     tokens: OAuthTokenSet,
-    options?: { phase?: 'oauth_callback' | 'api' },
+    options?: TikTokUserInfoOptions,
   ): Promise<TikTokUserSnapshot | null>;
   listVideos(
     tokens: OAuthTokenSet,
@@ -145,7 +149,7 @@ export function mapTikTokOAuthError(payload: {
 function mapTikTokApiError(
   status: number,
   body: unknown,
-  phase: 'oauth_callback' | 'api' = 'api',
+  phase: 'oauth_callback' | 'normal' = 'normal',
 ): OAuthFlowError {
   const payload =
     typeof body === 'object' && body !== null
@@ -254,9 +258,9 @@ export class TikTokProvider implements TikTokPlatformProvider {
 
   async getAuthenticatedUser(
     tokens: OAuthTokenSet,
-    options?: { phase?: 'oauth_callback' | 'api' },
+    options?: TikTokUserInfoOptions,
   ): Promise<TikTokUserSnapshot | null> {
-    const phase = options?.phase ?? 'api';
+    const phase = options?.phase ?? 'normal';
     const url = new URL(USER_INFO_URL);
     url.searchParams.set('fields', USER_INFO_FIELDS);
 
