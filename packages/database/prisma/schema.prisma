@@ -112,7 +112,7 @@ model SocialPosts {
   socialAccountId BigInt         @map("SocialAccountId")
   platformPostId  String         @map("PlatformPostId") @db.NVarChar(255)
   postType        String?        @map("PostType") @db.NVarChar(100)
-  title           String?        @map("Title")
+  title           String?        @map("Title") @db.NVarChar(Max)
   description     String?        @map("Description") @db.NVarChar(Max)
   postUrl         String?        @map("PostUrl") @db.NVarChar(2000)
   thumbnailUrl    String?        @map("ThumbnailUrl") @db.NVarChar(2000)
