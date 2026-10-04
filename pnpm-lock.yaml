@@ -96,6 +96,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@next/env':
+        specifier: 15.5.25
+        version: 15.5.25
       '@sma/types':
         specifier: workspace:*
         version: link:../../packages/types

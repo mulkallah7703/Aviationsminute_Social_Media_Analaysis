@@ -12,6 +12,7 @@
     "clean": "rimraf .next"
   },
   "dependencies": {
+    "@next/env": "15.5.25",
     "@sma/types": "workspace:*",
     "next": "^15.5.2",
     "react": "^19.1.1",
