@@ -14,7 +14,7 @@ module.exports = {
       name: 'sma-web',
       cwd: './apps/web',
       script: 'node_modules/next/dist/bin/next',
-      args: 'start --hostname 127.0.0.1 --port 3000',
+      args: 'start --hostname 127.0.0.1 --port 3200',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -24,7 +24,7 @@ module.exports = {
       time: true,
       env: {
         NODE_ENV: 'production',
-        API_INTERNAL_URL: 'http://127.0.0.1:5000',
+        API_INTERNAL_URL: 'http://127.0.0.1:5200',
       },
       error_file: '../../logs/web-error.log',
       out_file: '../../logs/web-out.log',
@@ -44,7 +44,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         API_HOST: '127.0.0.1',
-        API_PORT: '5000',
+        API_PORT: '5200',
       },
       error_file: '../../logs/api-error.log',
       out_file: '../../logs/api-out.log',
